@@ -1,0 +1,74 @@
+{
+  "name": "ast-transpiler",
+  "version": "0.0.62",
+  "type": "module",
+  "module": "./dist/transpiler.js",
+  "types": "./dist/transpiler.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/transpiler.cjs",
+      "import": "./dist/transpiler.js",
+      "types": "./dist/transpiler.d.ts"
+    }
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ccxt/ast-transpiler"
+  },
+  "readme": "README.md",
+  "scripts": {
+    "build": "npm run lint &&  tsup src/transpiler.ts --format cjs,esm --dts --clean --splitting --shims",
+    "build2": "npm run lint && tsc",
+    "start": "node --loader ts-node/esm run.ts",
+    "start-jl": "node --loader ts-node/esm src/juliaTranspilerDS.ts",
+    "start-py": "node --loader ts-node/esm src/pythonTranspiler.ts",
+    "test-ci": "jest --ci --coverage",
+    "test": "jest --verbose",
+    "testf": "jest --verbose --bail",
+    "testv": "jest --verbose --coverage",
+    "integration": "node --loader ts-node/esm tests/integration/test.ts",
+    "lint": "eslint src/ --ext .ts",
+    "publishPackage": "sh publish.sh && git push && git push --tags && npm publish"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.2.0",
+    "@types/node": "^18.11.4",
+    "@typescript-eslint/eslint-plugin": "^5.42.0",
+    "@typescript-eslint/parser": "^5.42.0",
+    "eslint": "^8.57.1",
+    "jest": "^29.2.2",
+    "test-jest": "^1.0.1",
+    "ts-jest": "^29.0.3",
+    "ts-node": "^10.9.1",
+    "tsup": "^6.4.0"
+  },
+  "dependencies": {
+    "colorette": "^2.0.19",
+    "piscina": "^3.2.0",
+    "typescript": "^4.8.4"
+  },
+  "author": {
+    "name": "Carlos Gonçalves",
+    "url": "https://github.com/carlosmiei"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ccxt/ccxt/issues"
+  },
+  "homepage": "https://ccxt.com",
+  "keywords": [
+    "transpiling",
+    "transpiler",
+    "ast",
+    "javascript",
+    "typescript",
+    "python",
+    "php",
+    "compiler",
+    "esm",
+    "cjs"
+  ]
+}

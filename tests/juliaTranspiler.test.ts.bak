@@ -1,0 +1,181 @@
+import { Transpiler } from '../src/transpiler';
+import { readFileSync } from 'fs';
+
+let transpiler: Transpiler;
+
+beforeAll(() => {
+    const config = {
+        'uncamelcaseIdentifiers': false,
+        'parser': {
+            'NUM_LINES_END_FILE': 0
+        }
+    };
+    transpiler = new Transpiler(config);
+});
+
+describe('julia transpiler tests', () => {
+    test('basic variable declaration', () => {
+        const ts = "const x = 1;";
+        const julia = "x = 1;\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('function declaration', () => {
+        const ts = "function add(a, b) { return a + b; }";
+        const julia =
+            "function add(a, b)\n" +
+            "    return a + b;\n" +
+            "end\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('class declaration', () => {
+        const ts = "class MyClass { constructor(a) { this.a = a; } }";
+        const julia =
+`struct MyClass
+    a
+end
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('if statement', () => {
+        const ts = "if (condition) { statement; }";
+        const julia = 
+`if condition
+    statement;
+end
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('for loop', () => {
+        const ts = "for (let i = 0; i < 10; i++) { console.log(i); }";
+        const julia = 
+`for i in 0:9
+    println(i);
+end\n`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('try-catch block', () => {
+        const ts =
+`try {
+    riskyCode();
+} catch (e) {
+    console.log(e);
+}`;
+        const julia =
+`try
+    riskyCode();
+catch e
+    println(e);
+end
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('comments', () => {
+        const ts = "// This is a comment\n/* Multi-line\ncomment */";
+        const julia = "# This is a comment\n#= Multi-line\ncomment =#";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('string literals', () => {
+        const ts = "const x = \"foo, 'single', \\\"double\\\" \\t \\n \\r \\b \\f \";";
+        const julia = "x = r\"foo, 'single', \"double\" \\t \\n \\r \\b \\f \";\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('array operations', () => {
+        const ts = "myArray.push(value);";
+        const julia = "push!(myArray, value);\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('math functions', () => {
+        const ts = "const result = Math.max(a, b);";
+        const julia = "result = max(a, b);\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('date function', () => {
+        const ts = "const now = Date.now();";
+        const julia = "now = Int(time());\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('method call replacement', () => {
+        const ts = "console.log('Hello');";
+        const julia = "println(r\"Hello\");\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('property access replacement', () => {
+        const ts = "const x = myObject.toUpperCase();";
+        const julia = "x = uppercase(myObject)";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('this keyword replacement', () => {
+        const ts = "this.myProperty = 'value';";
+        const julia = "self.myProperty = \"value\"";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('conditional expression', () => {
+        const ts = "const test = condition ? trueValue : falseValue;";
+        const julia = "test = condition ? trueValue : falseValue;\n"; // Added semicolon and newline
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+    
+    test.only('instanceOf expression', () => {
+         const ts = "if (x instanceof MyClass) { ... }";
+         const julia = "if isa(x, MyClass)\n    ...\nend\n";
+         const output = transpiler.transpileJulia(ts).content;
+         expect(output).toBe(julia);
+     });
+
+    test('typeof inside binary expression', () => {
+        const ts = "if (typeof x === 'string') { ... }";
+        const julia = "if isa(x, AbstractString)";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('delete expression', () => {
+        const ts = "delete myObject.property;";
+        const julia = "delete!(myObject, :property)";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('spread operator', () => {
+        const ts = "const newArray = [...oldArray];";
+        const julia = "newArray = [oldArray...]";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('assert statement', () => {
+        const ts = "assert(condition, 'message');";
+        const julia = "@assert condition \"message\"";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+});

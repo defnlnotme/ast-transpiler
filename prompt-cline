@@ -1,0 +1,127 @@
+# meta prompt
+Improve this prompt: "Our goal is to build a transpiler that transpiles typescript in julia. Our WIP julia transpiler is in src/juliaTranspilerDS.ts. use src/pythonTranspiler.ts as example on how a transpiler is built. fix one test at a time in tests/juliaTranspiler.test.ts until all pass.
+the agent should also be allowed to edit juliaTranspiler.test.ts
+It should work on each test one by one starting from the first.
+
+The iteration would be like:
+1. look inside the test file which is the current test to fix, find the first test which already has `.only` go to step 2.
+2. run `npm test -- --bail` to check if the current test passes, if it passes, remove `.only` from this test and add it to the next one, then go to step 1.
+3. if the test is not passing fix it by editing src/juliaTranspilerDS.ts (10 attempts allowed, try different modification to the transpiler if the test keeps failing)
+4. after editing the file, go to step 2.
+
+Only edit src/juliaTranspilerDS.ts and tests/juliaTranspiler.test.ts to fix tests."
+
+one last thing. The transpiler tests take as input a typescript string and expect as output a julia string.
+Beware that if a test fail but the expected output and the received output looks the same, it might be an indentation error or a new line error. You are allowed to modifiy the test expected julia code output, but only as a last resort if you can't fix the test after 10 attempts.
+
+
+# prompt
+
+Objective: Develop a Julia transpiler for a subset of TypeScript. The core transpiler logic resides in src/juliaTranspilerDS.ts. Your task is to iteratively fix failing tests in tests/juliaTranspiler.test.ts until all tests pass. You are allowed to modify both src/juliaTranspilerDS.ts (the transpiler) and tests/juliaTranspiler.test.ts (the tests).
+
+Context:
+
+Transpiler Goal: Convert TypeScript code (input) into semantically equivalent Julia code (output).
+
+Existing Code:
+
+    src/juliaTranspilerDS.ts: This is your work-in-progress Julia transpiler. It contains the core logic for the conversion.
+
+    tests/juliaTranspiler.test.ts: This file contains unit tests. Each test provides a TypeScript code snippet as input and the expected Julia code as output.
+
+    src/pythonTranspiler.ts: This file serves as an example of how a transpiler can be structured. Use it as a guide, but do not directly copy code from it. The Julia transpiler may have different requirements.
+
+Testing Framework: The testing framework is assumed to be a standard JavaScript testing library (like Jest) that supports the .only modifier to focus on a single test.
+
+Test Structure: Each transpiler test case in tests/juliaTranspiler.test.ts will:
+
+    Provide a TypeScript code string as input.
+
+    Define the expected Julia code string as output.
+
+    Call your transpiler (src/juliaTranspilerDS.ts) with the TypeScript input.
+
+    Assert that the transpiler's output exactly matches the expected Julia output.
+
+
+Iterative Development Process:
+
+You will follow a strict, iterative process to fix the tests one by one, starting from the first test in tests/juliaTranspiler.test.ts.
+
+1.  **Identify Current Test:**
+
+    *   Examine tests/juliaTranspiler.test.ts.
+
+    *   Find the first test which already has `.only` appended to it (e.g., `it.only(...)` or `test.only(...)`), that is your current test. Proceed to step 2.
+
+    *   If no test has `.only`, add `.only` to the first test case in the file. This makes it the current test. Proceed to step 2.
+
+2.  **Run and Evaluate Test:**
+
+    *   Execute the test suite with the command: `npm test -- --bail`. The `--bail` flag ensures that the test runner stops after the first failure (which will be the `.only` test).
+
+    *   Carefully analyze the test results:
+
+        *   If the test PASSES:
+
+            *   Remove `.only` from the current test.
+
+            *   Find the next test case in `tests/juliaTranspiler.test.ts`.
+
+            *   Add `.only` to this next test case.
+
+            *   Go back to step 1 (Identify Current Test).
+
+        *   If the test FAILS: Proceed to step 3 (Attempt to Fix).
+
+3.  **Attempt to Fix (Transpiler Modification - Primary Approach):**
+
+    *   You have a maximum of 10 attempts to fix the transpiler for each failing test.
+
+    *   When fixing new tests, never break test that have already been fixed. This is a crucial constraint. Before making any changes, consider whether your proposed modification might affect the behavior of previously passing tests. If there's a risk, you must adjust your approach.
+
+    *   Examine `src/juliaTranspilerDS.ts` for any `#TODO` comments. If you find any, address them before proceeding to analyze the specific test failure. Prioritize completing these TODOs, as they likely represent known areas needing improvement or implementation.
+
+    *   Analyze the Failure: Examine the test output closely. Pay attention to:
+
+        *   The specific error message.
+
+        *   The expected Julia output (from the test).
+
+        *   The actual Julia output produced by your transpiler.
+
+        *   The input TypeScript code.
+
+    *   Modify `src/juliaTranspilerDS.ts`: Based on your analysis (of the test failure and any completed TODOs), make targeted changes to the transpiler code in `src/juliaTranspilerDS.ts` to address the root cause of the failure. Try different modifications if the test continues to fail.  Think step by step about why the transpiler is producing the incorrect output and how to correct the logic.
+
+    *   After each modification: Go back to step 2 (Run and Evaluate Test).
+
+4.  **Test Modification (Last Resort):**
+
+    *   If, and only if, you have made 10 unsuccessful attempts to fix the transpiler (step 3), you are permitted to modify the expected output in `tests/juliaTranspiler.test.ts`.
+
+    *   **Justification:** Before modifying the test, provide a clear and concise explanation of why you believe the original expected output was incorrect and why your proposed change is the correct Julia equivalent of the input TypeScript.
+
+    *   **Modification:** Carefully adjust the expected Julia code string in the test case. Ensure the new expected output is valid and semantically correct Julia code.
+
+        *   **Crucially:** Only modify the expected output string. Do not change the input TypeScript or the test structure itself.  You are NOT allowed to edit the line `expect(output).toBe(julia);` since doing that would mean skipping the test, and your goal is to fix every test. Do break other tests to fix only one test. Don't "hardcode" fixes. Don't make tests pass with subterfuges (in a way that bypasses the goal of the test).
+
+    *   After modification: Go back to step 2 (Run and Evaluate Test).
+
+Important Considerations and Constraints:
+
+*   **Files:** You are only allowed to modify `src/juliaTranspilerDS.ts` and `tests/juliaTranspiler.test.ts`. DO NOT EDIT ANY OTHER FILE!
+
+*   **Whitespace and Formatting:** Be extremely careful with whitespace (spaces, tabs, newlines) in both the transpiler output and the expected output in the tests. A single extra space or missing newline can cause a test to fail. If the test output looks identical but the test fails, this is the likely cause.
+
+*   **Comments:** Add clear and concise comments to `src/juliaTranspilerDS.ts` to explain your changes, especially if the logic is complex.
+
+*   **Incremental Changes:** Make small, incremental changes to the transpiler. Avoid large, sweeping modifications that make it difficult to track down the source of errors.
+
+*   **Error Handling:** The initial transpiler may not handle all TypeScript features. Focus on correctly transpiling the code presented in the tests. You do not need to add comprehensive error handling for invalid TypeScript input at this stage.
+
+*   **Reasoning:** At each step, provide a short summary of your reasoning. For example: "The test failed because the transpiler was not handling variable declarations correctly. I modified the `handleVariableDeclaration` function to add the `local` keyword in Julia."
+
+*   **Restrictions on test modifications**: The only modifications allowed in the test is the output Julia code, and you can only do minor modifications like: adding semicolons to separate expressions, adding new lines, wrap codes in begin/end or () parenthesis. Only if you are 100% sure these minor modifications don't fix the tests after you have tried really hard to fix the Julia transpiler, then you can consider doing more invasive modifications in the Julia output code test, but only in the output code (the variable defined with `const julia`).
+
+*  **Valid Julia Code:** Ensure that the expected output Julia code in each test is valid Julia code.
