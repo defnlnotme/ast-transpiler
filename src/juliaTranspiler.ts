@@ -41,7 +41,7 @@ const parserConfig = {
     WHILE_TOKEN: "while",
     BREAK_TOKEN: "break",
     STRING_QUOTE_TOKEN: "",
-    LINE_TERMINATOR: "", // Remove the line terminator - No line terminator in Julia
+    LINE_TERMINATOR: ";", // Remove the line terminator - No line terminator in Julia
     METHOD_TOKEN: "function",
     CATCH_TOKEN: "catch",
     CATCH_DECLARATION: "e",
@@ -157,10 +157,21 @@ export class JuliaTranspiler extends BaseTranspiler {
             "Entering printVariableStatement function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
+        if (this.isCJSRequireStatement(node)) {
+            return ""; // remove cjs imports
+        }
         let result = "";
         if (node.declarationList) {
+            // Directly print the declaration list content without wrapping in comments here
             result += this.printNode(node.declarationList, identation);
         }
+        // Add the line terminator (semicolon) if it's expected
+        if (result.trim() !== "" && !result.endsWith(";")) {
+            // Check if not empty and doesn't already end with ;
+            // Let VariableDeclaration handle the semicolon if needed
+            result += this.LINE_TERMINATOR; // Use LINE_TERMINATOR if needed, else remove
+        }
+        // Comments will be handled by the caller printNode via printNodeCommentsIfAny
         return result;
     }
 
@@ -174,8 +185,10 @@ export class JuliaTranspiler extends BaseTranspiler {
         ); // Debug log
         let result = "";
         node.declarations.forEach((declaration) => {
+            // Directly print the declaration content without wrapping in comments here
             result += this.printVariableDeclaration(declaration, identation);
         });
+        // Comments will be handled by the caller printNode via printNodeCommentsIfAny
         return result;
     }
 
@@ -187,6 +200,27 @@ export class JuliaTranspiler extends BaseTranspiler {
             "Entering printVariableDeclaration function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
+        // Handle function expression assignment specifically
+        if (
+            node.initializer &&
+            (ts.isFunctionExpression(node.initializer) ||
+                ts.isArrowFunction(node.initializer)) &&
+            this.removeVariableDeclarationForFunctionExpression === false
+        ) {
+            // Use the specific function printing logic if we're NOT removing the variable declaration
+            let varName = "";
+            if (ts.isIdentifier(node.name)) {
+                varName = node.name.escapedText as string;
+            } else {
+                varName = this.printNode(node.name, 0); // Fallback
+            }
+            // Delegate to a function that handles function expression assignment
+            return this.printFunctionExpressionAsDeclaration(
+                node.initializer,
+                varName,
+            );
+        }
+
         let result = "";
         let varName = "";
         if (ts.isIdentifier(node.name)) {
@@ -198,17 +232,21 @@ export class JuliaTranspiler extends BaseTranspiler {
         const initializer = node.initializer;
 
         if (initializer && !ts.isFunctionExpression(initializer)) {
-            // functions declarations are handled differently
+            // Standard variable declaration with initializer
             const printedInitializer = this.printNode(initializer, 0);
-            result += `${varName} = ${printedInitializer};`; // Keep semicolon
+            result += `${varName} = ${printedInitializer}`; // REMOVED semicolon here
         } else if (!initializer) {
-            result += `${varName};`; // Keep semicolon
-        } else {
-            return this.printFunctionExpressionAsDeclaration(
-                initializer,
-                varName,
-            );
+            // Variable declaration without initializer
+            result += `${varName}`; // REMOVED semicolon here
+        } else if (
+            initializer &&
+            ts.isFunctionExpression(initializer) &&
+            this.removeVariableDeclarationForFunctionExpression === true
+        ) {
+            // If it IS a function expression AND we want to remove the var decl, print just the function
+            return this.printNode(initializer, identation); // Let printNode handle the FunctionExpression
         }
+        // Comments are handled by the outer `printNode` calling `printNodeCommentsIfAny` on the parent statement.
         return result.trim();
     }
 
@@ -559,7 +597,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         return `raw"${text}"`;
     }
 
-    printNullKeyword() {
+    printNullKeyword(node, identation) {
         return "nothing";
     }
 
@@ -595,14 +633,28 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Ensure identation is never negative
         identation = Math.max(0, identation);
 
-        const exprStm = this.printNode(node.expression, identation);
+        if (this.isCJSModuleExportsExpressionStatement(node)) {
+            return ""; // remove module.exports = ...
+        }
+        const exprStm = this.printNode(node.expression, 0); // Use 0 indent for the expression itself
 
         // Skip empty statements
         if (exprStm.length === 0) {
             return "";
         }
-        // Add semicolon back per test expectation
-        return this.getIden(identation) + exprStm + ";";
+        // Add semicolon only if it's not a block-like structure ending it implicitly
+        // and the config requires it (LINE_TERMINATOR is ";"). For Julia, it's empty.
+        const requiresTerminator =
+            this.LINE_TERMINATOR &&
+            !exprStm.endsWith("end") &&
+            !exprStm.endsWith("}");
+        // Apply indentation to the entire statement line
+        return (
+            this.getIden(identation) +
+            exprStm +
+            (requiresTerminator ? this.LINE_TERMINATOR : "")
+        );
+        // Using `this.getIden(0)` previously caused issues, using passed `identation` now.
     }
 
     printFunctionExpressionAsDeclaration(node, varName): string {
@@ -638,10 +690,11 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
 
         // Add 4 spaces of identation before end and a newline after
-        result += this.DEFAULT_IDENTATION.repeat(0) + "end;\n"; // Use DEFAULT_IDENTATION.repeat(0) for 'end'
+        // REMOVED semicolon from here, let the caller handle it.
+        result += this.DEFAULT_IDENTATION.repeat(0) + "end\n";
 
-        // Add an additional newline to match expected output
-        return result;
+        // Add an additional newline to match expected output - removed extra newline
+        return result.trimEnd(); // Trim potential trailing newline from block content before returning
     }
 
     printWhileStatement(node: ts.WhileStatement, identation = 0): string {
@@ -772,10 +825,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         const elseStatement = node.elseStatement;
         if (elseStatement) {
             if (elseStatement?.kind === ts.SyntaxKind.Block) {
-                const elseBlock = this.printBlock(
-                    elseStatement,
-                    identation,
-                );
+                const elseBlock = this.printBlock(elseStatement, identation);
                 result +=
                     this.getIden(identation) +
                     this.ELSE_TOKEN +
@@ -853,160 +903,250 @@ export class JuliaTranspiler extends BaseTranspiler {
     printNode(node: ts.Node, identation = 0): string {
         try {
             let result = "";
-            if (ts.isFunctionDeclaration(node)) {
-                // Directly call our overridden method which handles comments inside
-                result = this.printFunctionDeclaration(node, identation);
-            } else if (ts.isSourceFile(node)) {
-                // Existing printNode logic continues...
-                // ... (rest of the SourceFile logic remains the same) ...
-                result = "";
-                node.statements.forEach((statement, index) => {
-                    const printedStatement = this.printNode(
-                        statement,
-                        identation,
-                    );
-                    result += printedStatement;
-                    if (
-                        printedStatement.trim() &&
-                        !printedStatement.endsWith("\n") &&
-                        index < node.statements.length - 1
-                    ) {
-                        result += "\n";
-                    }
-                });
+            const originalIdentation = identation; // Store original identation
+            identation = Math.max(0, identation); // Ensure >= 0 for internal use
 
-                if (identation === -1 && result.trim()) {
-                    if (!result.endsWith("\n")) {
-                        result += "\n";
-                    }
-                } else if (identation === -1 && !result.trim()) {
-                    result = "";
-                }
-            } else if (ts.isExpressionStatement(node)) {
-                result = this.printExpressionStatement(node, identation);
-            } else if (ts.isBlock(node)) {
-                result = this.printBlock(node, identation);
-            } else if (ts.isFunctionExpression(node)) {
-                // Function expressions assigned to variables are handled in printVariableDeclaration
-                // If a function expression appears elsewhere, treat like declaration for now
-                // Use base class logic for this maybe, or handle specifically
-                result = super.printNode(node, identation); // Fallback to base potentially
-                // OR if it needs similar comment handling: return this.printFunctionDeclaration(node, identation);
-            } else if (ts.isArrowFunction(node)) {
-                result = super.printNode(node, identation); // Fallback for now
-            } else if (ts.isClassDeclaration(node)) {
-                result = this.printClass(node, identation);
-            }
-            // ... rest of the huge else-if chain from your original printNode ...
-            // Keep all other 'else if' conditions as they were
-            else if (ts.isVariableStatement(node)) {
-                result = this.printVariableStatement(node, identation);
-            } else if (ts.isVariableDeclarationList(node)) {
-                result = this.printVariableDeclarationList(node, identation);
-            } else if (ts.isVariableDeclaration(node)) {
-                result = this.printVariableDeclaration(node, identation);
-            } else if (ts.isMethodDeclaration(node)) {
-                result = this.printMethodDeclaration(node, identation);
-            } else if (ts.isStringLiteral(node)) {
-                result = this.printStringLiteral(node);
-            } else if (ts.isNumericLiteral(node)) {
-                result = this.printNumericLiteral(node);
-            } else if (ts.isPropertyAccessExpression(node)) {
-                result = this.printPropertyAccessExpression(node, identation);
-            } else if (ts.isArrayLiteralExpression(node)) {
-                result = this.printArrayLiteralExpression(node, identation);
-            } else if (ts.isCallExpression(node)) {
-                result = this.printCallExpression(node, identation);
-            } else if (ts.isWhileStatement(node)) {
-                result = this.printWhileStatement(node, identation);
-            } else if (ts.isBinaryExpression(node)) {
-                result = this.printBinaryExpression(node, identation);
-            } else if (ts.isBreakStatement(node)) {
-                result = this.printBreakStatement(node, identation);
-            } else if (ts.isForStatement(node)) {
-                result = this.printForStatement(node, identation);
-            } else if (ts.isPostfixUnaryExpression(node)) {
-                result = this.printPostFixUnaryExpression(node, identation);
-            } else if (ts.isObjectLiteralExpression(node)) {
-                result = this.printObjectLiteralExpression(node, identation);
-            } else if (ts.isPropertyAssignment(node)) {
-                result = this.printPropertyAssignment(node, identation);
-            } else if (ts.isIdentifier(node)) {
-                result = this.printIdentifier(node);
-            } else if (ts.isElementAccessExpression(node)) {
-                result = this.printElementAccessExpression(node, identation);
-            } else if (ts.isIfStatement(node)) {
-                result = this.printIfStatement(node, identation);
-            } else if (ts.isParenthesizedExpression(node)) {
-                result = this.printParenthesizedExpression(node, identation);
-            } else if ((ts as any).isBooleanLiteral(node)) {
-                result = this.printBooleanLiteral(node);
-            } else if (ts.SyntaxKind.ThisKeyword === node.kind) {
-                result = this.THIS_TOKEN;
-            } else if (ts.SyntaxKind.SuperKeyword === node.kind) {
-                result = this.SUPER_TOKEN;
-            } else if (ts.isTryStatement(node)) {
-                result = this.printTryStatement(node, identation);
-            } else if (ts.isPrefixUnaryExpression(node)) {
-                result = this.printPrefixUnaryExpression(node, identation);
-            } else if (ts.isNewExpression(node)) {
-                result = this.printNewExpression(node, identation);
-            } else if (ts.isThrowStatement(node)) {
-                result = this.printThrowStatement(node, identation);
-            } else if (ts.isAwaitExpression(node)) {
-                result = this.printAwaitExpression(node, identation);
-            } else if (ts.isConditionalExpression(node)) {
-                result = this.printConditionalExpression(node, identation);
-            } else if (ts.isAsExpression(node)) {
-                result = this.printAsExpression(node, identation);
-            } else if (ts.isReturnStatement(node)) {
-                result = this.printReturnStatement(node, identation);
-            } else if (ts.isContinueStatement(node)) {
-                result = this.printContinueStatement(node, identation);
-            } else if (ts.isDeleteExpression(node)) {
-                result = this.printDeleteExpression(node, identation);
-            } else {
-                // Fallback or log unhandled
-                console.warn(
-                    "Unhandled node kind in JuliaTranspiler printNode:",
-                    ts.SyntaxKind[node.kind],
-                    "Node text:",
-                    node.getText(),
-                );
-                result = "";
-            }
-
-            if (!ts.isFunctionDeclaration(node)) {
-                result = this.printNodeCommentsIfAny(node, identation, result);
-            }
-
-            // Final check for SourceFile at root level to ensure trailing newline
+            // --- Pre-computation/Handling ---
+            // Handle CJS require/exports early if they are standalone statements
             if (
-                ts.isSourceFile(node) &&
-                identation === -1 &&
-                result.trim() &&
-                !result.endsWith("\n")
+                ts.isVariableStatement(node) &&
+                this.isCJSRequireStatement(node)
             ) {
-                result += "\n";
+                return ""; // Remove cjs imports entirely
             }
+            if (
+                ts.isExpressionStatement(node) &&
+                this.isCJSModuleExportsExpressionStatement(node)
+            ) {
+                return ""; // remove module.exports = ...
+            }
+            // Handle Potential Function Expression Assignment early if needed
+            let isHandledFunctionExpressionAssignment = false;
+            if (
+                ts.isVariableDeclaration(node) &&
+                node.initializer &&
+                (ts.isFunctionExpression(node.initializer) ||
+                    ts.isArrowFunction(node.initializer)) &&
+                this.removeVariableDeclarationForFunctionExpression === false
+            ) {
+                // If we specifically DON'T remove the declaration, print it via the dedicated function
+                let varName = "";
+                if (ts.isIdentifier(node.name)) {
+                    varName = node.name.escapedText as string;
+                } else {
+                    varName = this.printNode(node.name, 0); // Fallback
+                }
+                result = this.printFunctionExpressionAsDeclaration(
+                    node.initializer,
+                    varName,
+                );
+                isHandledFunctionExpressionAssignment = true; // Mark as handled
+            }
+
+            // --- Main Node Processing ---
+            // Only proceed if not already handled (like the function expression assignment above)
+            if (!isHandledFunctionExpressionAssignment) {
+                if (ts.isSourceFile(node)) {
+                    // Logic for SourceFile - iterates statements
+                    result = "";
+                    node.statements.forEach((statement, index) => {
+                        // Get the printed statement for the current node
+                        const printedStatement = this.printNode(statement, 0); // Use 0 indent for top-level
+                        // Add indentation ONLY if the statement isn't empty
+                        if (printedStatement.trim()) {
+                            // Don't add extra indentation if the printed statement already starts with it (likely from a block)
+                            const startsWithIndent = /^\s+/.test(
+                                printedStatement,
+                            );
+                            result +=
+                                (!startsWithIndent ? this.getIden(0) : "") +
+                                printedStatement; // Apply base indent only if needed
+
+                            // Add newline between statements if needed
+                            if (
+                                !printedStatement.trimEnd().endsWith("\n") &&
+                                index < node.statements.length - 1
+                            ) {
+                                result += "\n"; // Add single newline
+                            } else if (
+                                printedStatement.trimEnd().endsWith("\n") &&
+                                index < node.statements.length - 1 &&
+                                node.statements[index + 1]
+                            ) {
+                                // Add extra newline if previous statement already ended with one (like blocks)
+                                // unless it's the very last statement, and respect config
+                                // result += "\n".repeat(this.LINES_BETWEEN_FILE_MEMBERS); // Use config here - Reverted for now
+                                if (!printedStatement.endsWith("\n\n")) {
+                                    // Avoid excessive newlines
+                                    result += "\n".repeat(
+                                        this.LINES_BETWEEN_FILE_MEMBERS,
+                                    );
+                                }
+                            }
+                        }
+                    });
+                    // Final newline management for the whole source file
+                    if (result.trim() && !result.endsWith("\n")) {
+                        result += "\n".repeat(this.NUM_LINES_END_FILE); // Add configured end lines
+                    } else if (result.trim()) {
+                        // If it already ends with \n, ensure the correct number of end lines
+                        result =
+                            result.trimEnd() +
+                            "\n".repeat(this.NUM_LINES_END_FILE);
+                    }
+                    // Comments are handled by each statement, if there are no statements
+                    // and only comments, we have to to print them directly
+                    if (node.statements.length == 0 && result.trim() == "") {
+                        result = this.printNodeCommentsIfAny(node, identation, "") + "\n"
+                    }
+                    // SourceFile handles its own comments if needed, skip printNodeCommentsIfAny
+                    return result; // Return directly for SourceFile
+                } else if (ts.isExpressionStatement(node)) {
+                    result = this.printExpressionStatement(node, 0); // Let the specific func handle indent
+                } else if (ts.isBlock(node)) {
+                    result = this.printBlock(node, identation); // Pass indentation
+                } else if (ts.isFunctionDeclaration(node)) {
+                    result = this.printFunctionDeclaration(node, identation); // Pass indentation
+                } else if (
+                    ts.isFunctionExpression(node) ||
+                    ts.isArrowFunction(node)
+                ) {
+                    // If we reach here, it means removeVariableDeclarationForFunctionExpression must be true
+                    // OR it's a function expression not assigned to a variable.
+                    result = this.printFunctionDeclaration(node, identation); // Treat like declaration
+                } else if (ts.isClassDeclaration(node)) {
+                    result = this.printClass(node, identation);
+                } else if (ts.isVariableStatement(node)) {
+                    // Variable statement contains declaration list
+                    result = this.printVariableStatement(node, 0); // Let func handle indent
+                } else if (ts.isVariableDeclarationList(node)) {
+                    // Usually handled by printVariableStatement, but could appear elsewhere (e.g., for loop initializer)
+                    result = this.printVariableDeclarationList(node, 0); // Let func handle indent
+                } else if (ts.isVariableDeclaration(node)) {
+                    // This case should ideally only be hit if it's NOT a function expression assignment
+                    // that was handled earlier, or if it's part of a declaration list processed directly.
+                    result = this.printVariableDeclaration(node, 0); // Let func handle indent
+                } else if (ts.isMethodDeclaration(node)) {
+                    result = this.printMethodDeclaration(node, identation);
+                } else if (ts.isStringLiteral(node)) {
+                    result = this.printStringLiteral(node);
+                } else if (ts.isNumericLiteral(node)) {
+                    result = this.printNumericLiteral(node);
+                } else if (ts.isPropertyAccessExpression(node)) {
+                    result = this.printPropertyAccessExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isArrayLiteralExpression(node)) {
+                    result = this.printArrayLiteralExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isCallExpression(node)) {
+                    result = this.printCallExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isWhileStatement(node)) {
+                    result = this.printWhileStatement(node, identation);
+                } else if (ts.isBinaryExpression(node)) {
+                    result = this.printBinaryExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isBreakStatement(node)) {
+                    result = this.printBreakStatement(node, 0); // Let func handle indent
+                } else if (ts.isForStatement(node)) {
+                    result = this.printForStatement(node, identation);
+                } else if (ts.isPostfixUnaryExpression(node)) {
+                    result = this.printPostFixUnaryExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isObjectLiteralExpression(node)) {
+                    result = this.printObjectLiteralExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isPropertyAssignment(node)) {
+                    result = this.printPropertyAssignment(node, identation + 1); // Indent property assignments within objects/classes
+                } else if (ts.isIdentifier(node)) {
+                    result = this.printIdentifier(node);
+                } else if (ts.isElementAccessExpression(node)) {
+                    result = this.printElementAccessExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isIfStatement(node)) {
+                    result = this.printIfStatement(node, identation);
+                } else if (ts.isParenthesizedExpression(node)) {
+                    result = this.printParenthesizedExpression(node, 0); // Inner expression handles indent
+                } else if ((ts as any).isBooleanLiteral(node)) {
+                    result = this.printBooleanLiteral(node);
+                } else if (ts.SyntaxKind.ThisKeyword === node.kind) {
+                    result = this.THIS_TOKEN;
+                } else if (ts.SyntaxKind.SuperKeyword === node.kind) {
+                    result = this.SUPER_TOKEN;
+                } else if (ts.isTryStatement(node)) {
+                    result = this.printTryStatement(node, identation);
+                } else if (ts.isPrefixUnaryExpression(node)) {
+                    result = this.printPrefixUnaryExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isNewExpression(node)) {
+                    result = this.printNewExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isThrowStatement(node)) {
+                    result = this.printThrowStatement(node, 0); // Let func handle indent
+                } else if (ts.isAwaitExpression(node)) {
+                    result = this.printAwaitExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isConditionalExpression(node)) {
+                    result = this.printConditionalExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isAsExpression(node)) {
+                    result = this.printAsExpression(node, 0); // Expressions usually don't need outer indent
+                } else if (ts.isReturnStatement(node)) {
+                    result = this.printReturnStatement(node, 0); // Let func handle indent
+                } else if (ts.isContinueStatement(node)) {
+                    result = this.printContinueStatement(node, 0); // Let func handle indent
+                } else if (ts.isDeleteExpression(node)) {
+                    result = this.printDeleteExpression(node, 0); // Let func handle indent
+                } else if (ts.isConstructorDeclaration(node)) {
+                    result = this.printConstructorDeclaration(node, identation); // Pass indentation
+                } else if (ts.isPropertyDeclaration(node)) {
+                    result = this.printPropertyDeclaration(node, 0); // Let func handle indent - usually within a class
+                } else if (ts.SyntaxKind.NullKeyword === node.kind) {
+                    result = this.printNullKeyword(node, 0); // Let func handle indent
+                }
+                // ... other specific node types ...
+                else {
+                    // Fallback for unhandled nodes
+                    console.warn(
+                        "Unhandled node kind in JuliaTranspiler printNode:",
+                        ts.SyntaxKind[node.kind],
+                        "Node text:",
+                        node.getText()?.substring(0, 100), // Log snippet
+                    );
+                    result = ""; // Return empty for unhandled for now
+                }
+            }
+
+            // --- Post-computation/Cleanup ---
+            // Add comments IF the node kind isn't one that handles its own comments (like SourceFile)
+            const skipCommentWrapper =
+                ts.isSourceFile(node) ||
+                ts.isPropertyAssignment(node) || // Nodes that might have comments handled internally or differently
+                ts.isVariableDeclaration(node) ||
+                ts.isVariableDeclarationList(node) || // Let VariableStatement handle comments
+                ts.isBlock(node); // Blocks handle comments via their statements
+            if (!skipCommentWrapper) {
+                // Apply comments using the *original* identation level passed to printNode
+                result = this.printNodeCommentsIfAny(
+                    node,
+                    originalIdentation,
+                    result,
+                );
+            }
+            console.log(ts.ScriptKind[node.kind]);
+            console.log(result);
 
             return result;
         } catch (e) {
             // ... (error handling remains the same) ...
+            console.error(
+                "Error processing node:",
+                node.getText()?.substring(0, 200),
+            ); // Log more text
             console.error("Error in printNode:", e);
             if (e instanceof TranspilationError) {
                 throw e;
             } else {
                 throw new TranspilationError(
-                    this.id,
+                    "julia", // Hardcode ID here or pass from constructor if needed
                     e.message || String(e),
-                    e.stack,
+                    e.stack || "No stack trace",
                     node.pos,
                     node.end,
                 );
             }
         }
     }
+
     printContinueStatement(
         node: ts.ContinueStatement,
         identation: number = 0,
@@ -1136,14 +1276,14 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         result += "(";
 
-        let params = ""
+        let params = "";
         if (node.parameters) {
             params += node.parameters
                 .map((param) => this.printParameter(param, true))
                 .join(", ");
         }
         this.currentFunctionParams = params;
-        result += params
+        result += params;
         result = result.replace(/^\(\s*,\s*/, "(");
         result = result.replace(/,(\s*)$/, "$1");
         result = result.replace(/\(\s*\)/, "()");
@@ -1893,14 +2033,10 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printTryStatement(node, identation) {
-        const tryBody = this.printBlock(node.tryBlock, identation + 1);
+        const tryBody = this.printBlock(node.tryBlock, identation);
 
-        const catchBody = this.printBlock(
-            node.catchClause.block,
-            identation + 1,
-        );
+        const catchBody = this.printBlock(node.catchClause.block, identation);
         const catchDeclaration = this.CATCH_DECLARATION; // + " " + this.printNode(node.catchClause.variableDeclaration.name, 0);
-        //const catchDeclaration = this.CATCH_DECLARATION + " " + this.printNode(node.catchClause.variableDeclaration.name, 0); // fix #1: remove extra e
 
         const catchCondOpen = this.CONDITION_OPENING
             ? this.CONDITION_OPENING
@@ -2124,27 +2260,42 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     transformLeadingComment(comment) {
         const commentRegex = [
-            [ /(^|\s)\/\//g, '$1#' ], // regular comments // ADDED THIS LINE
+            [/(^|\s)\/\//g, "$1#"], // regular comments // ADDED THIS LINE
             // General cleanup and structure
-            [/^\s*\/\*+/, (_match, ..._args) => { // Mark args/match unused if not needed
-                // Check if it's a potential JSDoc comment (starts with /**) AND we are inside a function context
-                if (this.withinFunctionDeclaration && comment.startsWith('/**')) {
-                    const functionName = `${this.currentFunctionName || ''}(${this.currentFunctionParams || ''})`;
-                    return `"""\n${this.DEFAULT_IDENTATION}${functionName}\n\n`; // Start Julia docstring
-                } else if (comment.startsWith('/*')) { // Handle regular block comments /* ... */
-                    return '#='; // Start Julia block comment
-                }
-                // Fallback - should ideally not be reached if comment parsing is robust
-                return comment;
-            }], // Handles start /** -> """ or /* -> #=
-            [/\*+\/\s*$/, (_match, ..._args) => { // Use a function for conditional replacement
-                // Check if it was originally a JSDoc comment (started with /**) and we are inside a function
-                if (this.withinFunctionDeclaration && comment.startsWith('/**')) {
-                     return '"""'; // End Julia docstring
-                } else {
-                     return '=#'; // End Julia block comment
-                }
-            }], // End docstring or block comment
+            [
+                /^\s*\/\*+/,
+                (_match, ..._args) => {
+                    // Mark args/match unused if not needed
+                    // Check if it's a potential JSDoc comment (starts with /**) AND we are inside a function context
+                    if (
+                        this.withinFunctionDeclaration &&
+                        comment.startsWith("/**")
+                    ) {
+                        const functionName = `${this.currentFunctionName || ""}(${this.currentFunctionParams || ""})`;
+                        return `"""\n${this.DEFAULT_IDENTATION}${functionName}\n\n`; // Start Julia docstring
+                    } else if (comment.startsWith("/*")) {
+                        // Handle regular block comments /* ... */
+                        return "#="; // Start Julia block comment
+                    }
+                    // Fallback - should ideally not be reached if comment parsing is robust
+                    return comment;
+                },
+            ], // Handles start /** -> """ or /* -> #=
+            [
+                /\*+\/\s*$/,
+                (_match, ..._args) => {
+                    // Use a function for conditional replacement
+                    // Check if it was originally a JSDoc comment (started with /**) and we are inside a function
+                    if (
+                        this.withinFunctionDeclaration &&
+                        comment.startsWith("/**")
+                    ) {
+                        return '"""'; // End Julia docstring
+                    } else {
+                        return "=#"; // End Julia block comment
+                    }
+                },
+            ], // End docstring or block comment
             // Remove leading * and optional space, BUT keep indentation relative to the *start* of the docstring block
             [/\n\s*\* ?/g, "\n"], // Simple removal for now, might need refinement for complex indents
 
@@ -2257,7 +2408,10 @@ export class JuliaTranspiler extends BaseTranspiler {
         );
 
         // Ensure there's a new line after the heading function name
-        transformed = transformed.replace(/("""\n[^\s#][^\n]*)(?=\n[^"""])/s, "$1\n");
+        transformed = transformed.replace(
+            /("""\n[^\s#][^\n]*)(?=\n[^"""])/s,
+            "$1\n",
+        );
 
         // Remove leading/trailing empty lines inside the docstring
         transformed = transformed.replace(/"""\n(\s*\n)+/g, '"""\n'); // remove empty lines at start
@@ -2268,46 +2422,58 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     transformTrailingComment(comment) {
         const commentRegex = [
-            [/(^|\s)\/\//g, "$1#"], // regular comments
+            [/(^|\s)\/\//g, "$1#"], // Transform // comments to #
         ];
-
         const transformed = regexAll(comment, commentRegex);
-        return " " + transformed;
+        // Trim potential whitespace introduced by regex or original comment text
+        return transformed.trim();
     }
 
     printNodeCommentsIfAny(node, identation, parsedNode) {
-        // Handle other comments for non-function nodes
-
         const leadingComment = this.printLeadingComments(node, identation);
-        const trailingComment = this.printTraillingComment(node, identation);
+        let trailingComment = ""; // Initialize empty
 
-        // Avoid adding empty comments
+        // Check if parent node ends at the same position. If so, parent will handle the trailing comment.
+        const parent = node.parent;
+        if (!parent || parent.end !== node.end) {
+            trailingComment = this.printTraillingComment(node, identation);
+        }
+
+        // Avoid adding empty comments or disrupting existing newlines badly
         let result = "";
         if (leadingComment.trim()) {
-            result += leadingComment;
-            // Ensure newline after leading comment if the node itself doesn't start with one
-            if (
-                parsedNode &&
-                !parsedNode.startsWith("\n") &&
-                !result.endsWith("\n")
-            ) {
-                result += "\n";
+            // Add leading comment, ensuring it's on its own line if parsedNode is not empty
+            result += leadingComment.trimEnd(); // Trim trailing newline from comment block itself
+            if (parsedNode && parsedNode.trim()) {
+                // Check if parsedNode has content
+                // Add newline only if the result doesn't already end with one AND parsedNode doesn't start with one
+                if (!result.endsWith("\n") && !/^\s*\n/.test(parsedNode)) {
+                    result += "\n";
+                }
             }
         }
+
+        // JSDoc handling (remains the same)
         if (this.withinFunctionDeclaration && this.nodeContainsJsDoc(node)) {
-            this.tmpJSDoc = result;
-            result = "";
+            this.tmpJSDoc = result; // Store potential docblock
+            result = ""; // Clear result so it's not duplicated
         }
+
+        // Add the parsed node content
         result += parsedNode;
+
+        // Add trailing comment (only if it was fetched)
         if (trailingComment.trim()) {
-            // Ensure space before trailing comment if node content exists
+            // Check if the parsed node already ends with a newline. Add space or newline accordingly.
             if (
                 parsedNode &&
-                !parsedNode.endsWith(" ") &&
-                !parsedNode.endsWith("\n")
+                !parsedNode.endsWith("\n") &&
+                !parsedNode.endsWith(" ")
             ) {
+                // If no newline or space, add a space before the comment
                 result += " ";
             }
+            // Add the trimmed trailing comment (it already has its leading space from printTraillingComment)
             result += trailingComment;
         }
 
@@ -2456,5 +2622,27 @@ export class JuliaTranspiler extends BaseTranspiler {
             }
         }
         return false;
+    }
+
+    printTraillingComment(node, identation) {
+        const fullText = global.src.getFullText();
+        // Fetch all potential trailing comment ranges ending at the node's end position
+        const commentRanges = ts.getTrailingCommentRanges(fullText, node.end);
+        let res = "";
+
+        // Process only the *first* identified trailing comment range to avoid duplication
+        // for nested nodes ending at the same position.
+        if (commentRanges && commentRanges.length > 0) {
+            const firstCommentRange = commentRanges[0];
+            const commentText = fullText.slice(
+                firstCommentRange.pos,
+                firstCommentRange.end,
+            );
+            if (commentText !== undefined) {
+                // Prepend space here before adding the transformed comment
+                res += this.transformTrailingComment(commentText);
+            }
+        }
+        return res;
     }
 }
