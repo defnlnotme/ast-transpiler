@@ -529,8 +529,8 @@ const y = Object.keys(x);
 const yy = Object.values(x);`;
         const julia =
 `x = Dict();
-y = keys(x);
-yy = values(x);
+y = [k for k in keys(x)];
+yy = [v for v in values(x)];
 `;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
@@ -566,7 +566,7 @@ yy = values(x);
 
     test('date function', () => {
         const ts = "const now = Date.now();";
-        const julia = "now = Int(time() * 1000);\n";
+        const julia = "now = round(Int, time() * 1000);\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
@@ -815,7 +815,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('Date.now()', () => {
+    test('Date.now()', () => {
         const ts = `Date.now();`;
         const julia = `round(Int, time() * 1000);\n`;
         const output = transpiler.transpileJulia(ts).content;
@@ -831,14 +831,22 @@ end
 
     test('convert search', () => {
         const ts = `"abcdxtzyw".search("xt");`;
-        const julia = `findfirst("xt", "abcdxtzyw");`;
+        const julia =
+`let v = findfirst(raw"xt", raw"abcdxtzyw");
+    if v == nothing
+        -1
+    else
+        v[1]
+    end
+end
+`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
     test('Array.isArray', () => {
         const ts = `Array.isArray(x)`;
-        const julia = `isa(x, Array)`;
+        const julia = `isa(x, AbstractArray);\n`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
@@ -852,35 +860,37 @@ end
 
     test('instanceOf expression', () => {
         const ts = "if (x instanceof MyClass) { ... }";
-        const julia = "if isa(x MyClass)\nend\n"; // Corrected expected output, removed '...'
+        const julia =
+`if isa(x, MyClass)
+end`; // Corrected expected output, removed '...'
         const output = transpiler.transpileJulia(ts).content.trim(); // Trim output
         expect(output.replace(/\s/g, '')).toBe(julia.trim().replace(/\s/g, '')); // Remove assertion
     });
 
     test('typeof inside binary expression', () => {
         const ts = "if (typeof x === 'string') { ... }";
-        const julia = "if isa(x, (AbstractString))\nend\n"; // Corrected expected output to include parentheses and newline
+        const julia = "if isa(x, AbstractString)\nend\n"; // Corrected expected output to include parentheses and newline
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia); // Revert to simple toBe comparison
     });
 
     test('delete expression', () => {
         const ts = "delete myObject.property;";
-         const julia = "# TODO: Implement node type: DeleteExpression"; // Updated expected output to TODO comment
+         const julia = "delete!(myObject, :property);\n"; // Updated expected output to TODO comment
          const output = transpiler.transpileJulia(ts).content;
          expect(output).toBe(julia); // Comment out assertion for delete expression test
     });
 
     test('spread operator', () => {
          const ts = "const newArray = [...oldArray];";
-         const julia = "newArray = [oldArray...]";
+         const julia = "newArray = [oldArray...];";
          const output = transpiler.transpileJulia(ts).content.trim(); // Trim output
          expect(output).toBe(julia.trim()); // Trim expected output as well
      });
 
     test('assert statement', () => { // Removed .only from 'assert statement' test
         const ts = "assert(condition, 'message');";
-        const julia = "@assert condition \"message\"";
+        const julia = "@assert condition \"message\";\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
