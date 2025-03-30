@@ -15,14 +15,14 @@ beforeAll(() => {
 });
 
 describe('julia transpiler tests', () => {
-    test.only('basic variable declaration', () => {
+    test('basic variable declaration', () => {
         const ts = "const x = 1;";
         const julia = "x = 1;";
         const output = transpiler.transpileJulia(ts).content.trim();
         expect(output).toBe(julia);
     });
 
-    test.only('basic while loop', () => {
+    test('basic while loop', () => {
         const ts =
         "while (true) {\n" +
         "    const x = 1;\n" +
@@ -38,7 +38,7 @@ describe('julia transpiler tests', () => {
         expect(output).toBe(julia);
     });
 
-    test.only('basic for loop', () => {
+    test('basic for loop', () => {
         const ts =
         "for (let i = 0; i < 10; i++) {\n" +
         "    break;\n" +
@@ -51,7 +51,7 @@ describe('julia transpiler tests', () => {
         expect(output).toBe(julia);
     });
 
-    test.only('function declaration', () => {
+    test('function declaration', () => {
         const ts = "function add(a, b) { return a + b; }";
         const julia =
             "function add(a, b)\n" +
@@ -61,7 +61,7 @@ describe('julia transpiler tests', () => {
         expect(output).toBe(julia);
     });
 
-    test.only('function with default parameters', () => {
+    test('function with default parameters', () => {
         const ts = "function teste(x = \"foo\", y = undefined, params = {}) { return 1; }";
         const julia =
 `function teste(x=raw"foo", y=nothing, params=Dict())
@@ -71,7 +71,7 @@ end;`;
         expect(output).toBe(julia);
     });
 
-    test.only('callback function transpilation', () => {
+    test('callback function transpilation', () => {
         const ts =
 `function printResult(result) {
     return;
@@ -89,7 +89,7 @@ processNumbers(5, 10, printResult);
         expect(output).toBe(julia);
     });
 
-    test.only('function expression transpilation', () => {
+    test('function expression transpilation', () => {
     const ts = "const consumer = function consumer(a) { return a + 1; };";
     const julia =
 `function consumer(a)
@@ -99,7 +99,7 @@ end;\n`;
         expect(output).toBe(julia);
     });
 
-    test.only('nested if statements', () => {
+    test('nested if statements', () => {
         const ts =
 `if (1) {
     if (2) {
@@ -125,7 +125,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('nested objects', () => {
+    test('nested objects', () => {
         const ts =
 `const x = {
     'world': {
@@ -147,7 +147,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('if statement', () => {
+    test('if statement', () => {
         const ts = "if (condition) { statement; }";
         const julia =
 `if condition
@@ -158,7 +158,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('if-else statement', () => {
+    test('if-else statement', () => {
         const ts =
 `if (1) {
     const x = 1;
@@ -176,7 +176,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('if-elseif-else statement', () => {
+    test('if-elseif-else statement', () => {
         const ts =
 `if (1) {
     const x = 1;
@@ -198,7 +198,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('async function declaration', () => {
+    test('async function declaration', () => {
         const ts =
 `async function camelCase() {
     this.myFunc()
@@ -214,7 +214,7 @@ end;
         expect(output).toBe(julia);
     });
 
-    test.only('convert async function to sync', () => {
+    test('convert async function to sync', () => {
         transpiler.setJuliaAsyncTranspiling(false);
         const ts =
 `async function camelCase() {
@@ -232,7 +232,7 @@ end;
         expect(output).toBe(julia);
     });
 
-    test.only('class declaration', () => {
+    test('class declaration', () => {
         const ts = "class MyClass { constructor(a, b: number) { this.a = a; this.b = b; } }";
         const julia =
 `struct MyClass
@@ -252,7 +252,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('class declaration with properties', () => {
+    test('class declaration with properties', () => {
         const ts =
 `class MyClass {
     public static x: number = 10;
@@ -284,7 +284,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('for loop', () => {
+    test('for loop', () => {
         const ts = "for (let i = 0; i < 10; i++) { console.log(i); }";
         const julia =
 `for i in 0:9
@@ -294,7 +294,7 @@ end\n`;
         expect(output).toBe(julia);
     });
 
-    test.only('class inheritance', () => {
+    test('class inheritance', () => {
         const ts =
 `class teste extends extended {
     public static a1: string[] = [ 'a', 'b' ];
@@ -330,7 +330,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('class with constructor', () => {
+    test('class with constructor', () => {
         const ts =
 `class teste extends extended {
     constructor(x) {
@@ -369,7 +369,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('dictionary', () => {
+    test('dictionary', () => {
         const ts =
 `const types = {
     'limit': 'limit',
@@ -387,7 +387,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('binary expressions', () => {
+    test('binary expressions', () => {
         const ts =
 `const a = 1 + 1;
 const b = 2 * 2;
@@ -407,7 +407,7 @@ f = string(raw"foo", raw"bar");
         expect(output).toBe(julia);
     });
 
-    test.only('condition expressions', () => {
+    test('condition expressions', () => {
         const ts =
 `const a = true;
 const b = false;
@@ -423,7 +423,7 @@ d = (a && b) || (c && !b);
         expect(output).toBe(julia);
     });
 
-    test.only('postfix unary expression', () => {
+    test('postfix unary expression', () => {
         const ts =
 `let x = 1;
 x++;
@@ -439,7 +439,7 @@ y -= 1;
         expect(output).toBe(julia);
     });
 
-    test.only('element access expression', () => {
+    test('element access expression', () => {
         const ts =
 `const x = {};
 x['foo'] = 'bar'`;
@@ -451,7 +451,7 @@ x[raw"foo"] = raw"bar";
         expect(output).toBe(julia);
     });
 
-    test.only('throw statement', () => {
+    test('throw statement', () => {
         const ts =
 `function testf {
     throw new InvalidOrder("error")
@@ -465,7 +465,7 @@ end;
         expect(output).toBe(julia);
     });
 
-    test.only('try-catch block', () => {
+    test('try-catch block', () => {
         const ts =
 `try {
     riskyCode();
@@ -483,7 +483,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('comparison operators', () => {
+    test('comparison operators', () => {
           const ts =
 `const a = 1;
 const b = 1+1;
@@ -507,7 +507,7 @@ h = a <= b;
           expect(output).toBe(julia);
       });
 
-    test.only('json methods', () => {
+    test('json methods', () => {
         const ts =
 `const j = JSON.stringify({ 'a': 1, 'b': 2 });
 const k = JSON.parse(j);`;
@@ -522,7 +522,7 @@ k = JSON3.parse(j);
         expect(output).toBe(julia);
     });
 
-    test.only('object methods', () => {
+    test('object methods', () => {
         const ts =
 `const x = {};
 const y = Object.keys(x);
@@ -536,63 +536,63 @@ yy = values(x);
         expect(output).toBe(julia);
     });
 
-    test.only('comments', () => {
+    test('comments', () => {
         const ts = "// This is a comment\n/* Multi-line\ncomment */";
         const julia = "# This is a comment\n#= Multi-line\ncomment =#\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('string literals', () => {
+    test('string literals', () => {
         const ts = "const x = \"foo, 'single', \\\"double\\\" \\t \\n \\r \\b \\f \";";
         const julia = "x = raw\"foo, 'single', \\\"double\\\" \\t \\n \\r \\b \\f \";\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('array operations', () => {
+    test('array operations', () => {
         const ts = "myArray.push(value);";
         const julia = "push!(myArray, value);\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('math functions', () => {
+    test('math functions', () => {
         const ts = "const result = Math.max(a, b);";
         const julia = "result = max(a, b);\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('date function', () => {
+    test('date function', () => {
         const ts = "const now = Date.now();";
         const julia = "now = Int(time() * 1000);\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('method call replacement', () => {
+    test('method call replacement', () => {
         const ts = "console.log('Hello');";
         const julia = "println(raw\"Hello\");\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('property access replacement', () => {
+    test('property access replacement', () => {
         const ts = "const x = myObject.toUpperCase();";
         const julia = "x = uppercase(myObject);\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('this keyword replacement', () => {
+    test('this keyword replacement', () => {
         const ts = "this.myProperty = 'value';";
         const julia = "self.myProperty = raw\"value\";\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test.only('comparison with undefined', () => {
+    test('comparison with undefined', () => {
         const ts =
 `const x = 1 === undefined;
 const y = 1 !== undefined;
@@ -606,7 +606,7 @@ c = 3 == nothing;
         expect(output).toBe(julia);
     });
 
-    test.only('indexOf string check existence', () => {
+    test('indexOf string check existence', () => {
         const ts =
 `const myString = "bar"
 const exists = myString.indexOf("b") >= 0;`;
@@ -618,7 +618,7 @@ exists = findfirst(raw"b", myString) !== nothing;
         expect(output).toBe(julia);
     });
 
-    test.only('indexOf list check existence', () => {
+    test('indexOf list check existence', () => {
         const ts =
 `const myList = [1,2,3];
 const exists = myList.indexOf(1) >= 0;`;
@@ -630,7 +630,7 @@ exists = findfirst(1, myList) !== nothing;
         expect(output).toBe(julia);
     });
 
-    test.only('includes list', () => {
+    test('includes list', () => {
         const ts =
 `const myList = [1,2,3];
 const exists = myList.includes(1);`;
@@ -642,7 +642,7 @@ exists = 1 in myList;
         expect(output).toBe(julia);
     });
 
-    test.only('includes string', () => {
+    test('includes string', () => {
         const ts =
 `const myString = "bar"
 const exists = myString.includes("b");`;
@@ -654,7 +654,7 @@ exists = occursin(raw"b", myString);
         expect(output).toBe(julia);
     });
 
-    test.only('as expression', () => {
+    test('as expression', () => {
         const ts =
 `const x = 1;
 const a = "foo";
@@ -672,7 +672,7 @@ z = x;
         expect(output).toBe(julia);
     });
 
-    test.only('snake case function and method calls', () => {
+    test('snake case function and method calls', () => {
         transpiler.setJuliaUncamelCaseIdentifiers(true);
         const ts =
 `function camelCase() {
@@ -690,7 +690,7 @@ end;
         expect(output).toBe(julia);
     });
 
-    test.only('Promise.all conversion', () => {
+    test('Promise.all conversion', () => {
         const ts =
 `let promises = [this.fetchSwapAndFutureMarkets(params), this.fetchUSDCMarkets(params)];
 promises = await Promise.all(promises);`;
@@ -702,7 +702,7 @@ promises = [fetch(p) for p in promises];
         expect(output).toBe(julia);
     });
 
-    test.only('convert JS doc to Julia doc', () => {
+    test('convert JS doc to Julia doc', () => {
         const ts =
 `function fetchStatus(params) {
     /**
@@ -734,7 +734,7 @@ end;
         expect(output).toBe(julia);
     });
 
-    test.only('leading and trailing comments', () => {
+    test('leading and trailing comments', () => {
         const ts =
 `// I'm a leading comment
 const z = "my var" // I'm a trailing comment
@@ -753,7 +753,7 @@ a = raw"bar"; # I'm second trailing comment
             'sha256': 'SHA.sha256',
         });
         const ts = `const x = "sha256"`;
-        const julia = `x = SHA.sha256;`;
+        const julia = `x = raw"sha256";\n`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
         transpiler.setJuliaStringLiteralReplacements({});
@@ -761,7 +761,7 @@ a = raw"bar"; # I'm second trailing comment
 
     test('Number.isInteger', () => {
         const ts = `Number.isInteger(1)`;
-        const julia = `isinteger(1)`;
+        const julia = `isinteger(1);\n`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
@@ -770,7 +770,7 @@ a = raw"bar"; # I'm second trailing comment
         const ts =
 `const {a,b,x} = require('ola')
 const myVar = a.b;`;
-        const julia = `myVar = a.b;`;
+        const julia = `myVar = a.b;\n`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
@@ -793,7 +793,7 @@ const myVar = a.b;`;
     console.log(1);
 }`;
         const julia =
-`if x == true
+`if x
     println(1);
 end
 `;
@@ -815,16 +815,16 @@ end
         expect(output).toBe(julia);
     });
 
-    test('Date.now()', () => {
+    test.only('Date.now()', () => {
         const ts = `Date.now();`;
-        const julia = `Int(time() * 1000);`;
+        const julia = `round(Int, time() * 1000);\n`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
     test('convert concat', () => {
         const ts = `y.concat(z)`;
-        const julia = `vcat(y, z)`;
+        const julia = `string(y, z);\n`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });

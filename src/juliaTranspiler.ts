@@ -124,15 +124,12 @@ export class JuliaTranspiler extends BaseTranspiler {
             "Number.MAX_SAFE_INTEGER": "typemax(Int)",
             "Number.isInteger": "isinteger",
             "Array.isArray": "isa(x, Array)", // FIX: this is not correct, should be implemented in printCallExpression
-            "Date.now": "Int(time() * 1000)", // milliseconds, for seconds use Int(time())
         };
         this.CallExpressionReplacements = {
             parseInt: "parse(Int, ",
             parseFloat: "parse(Float64, ",
             "Promise.all": "asyncmap(identity, ",
             "String.fromCharCode": "char(",
-            "y.concat": "vcat(y, ",
-            "x.concat": "vcat(x, ",
             atob: "base64decode(",
             btoa: "base64encode(",
             decodeURIComponent: "urldecode(",
@@ -997,7 +994,9 @@ export class JuliaTranspiler extends BaseTranspiler {
                     // Comments are handled by each statement, if there are no statements
                     // and only comments, we have to to print them directly
                     if (node.statements.length == 0 && result.trim() == "") {
-                        result = this.printNodeCommentsIfAny(node, identation, "") + "\n"
+                        result =
+                            this.printNodeCommentsIfAny(node, identation, "") +
+                            "\n";
                     }
                     // SourceFile handles its own comments if needed, skip printNodeCommentsIfAny
                     return result; // Return directly for SourceFile
@@ -1403,6 +1402,11 @@ export class JuliaTranspiler extends BaseTranspiler {
                             identation,
                             parsedArg,
                         );
+                }
+            } else if (args.length == 0) {
+                switch (expressionText) {
+                    case "Date.now":
+                        return this.printDateNowCall(node, identation);
                 }
             }
             const rightSide = node.expression.name?.escapedText;
@@ -2160,7 +2164,7 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printConcatCall(node: any, identation: any, name?: any, parsedArg?: any) {
-        return `vcat(${name}, ${parsedArg})`;
+        return `string(${name}, ${parsedArg})`;
     }
 
     printArrayPushCall(node, identation, name, parsedArg) {
@@ -2644,5 +2648,11 @@ export class JuliaTranspiler extends BaseTranspiler {
             }
         }
         return res;
+    }
+    printDateNowCall(node: any, identation: any) {
+        return (
+            this.DEFAULT_IDENTATION.repeat(identation) +
+            `round(Int, time() * 1000)`
+        );
     }
 }
