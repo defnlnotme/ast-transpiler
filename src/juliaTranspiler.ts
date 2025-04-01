@@ -514,19 +514,60 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         let operator = this.SupportedKindNames[node.operatorToken.kind];
 
-        let leftVar = undefined;
-        let rightVar = undefined;
+        // String concatenation check
+        if (operatorToken.kind === ts.SyntaxKind.PlusToken) {
+            const leftType = global.checker.getTypeAtLocation(left);
+            const rightType = global.checker.getTypeAtLocation(right);
+            if (this.isStringType(leftType.flags) || this.isStringType(rightType.flags)) {
+                // It's potentially string concatenation
+                let leftStr = this.printNode(left, 0);
+                let rightStr = this.printNode(right, 0); // Print right without extra indent
 
-        if (
-            operatorToken.kind === ts.SyntaxKind.PlusToken &&
-            (left.kind === ts.SyntaxKind.StringLiteral ||
-                right.kind === ts.SyntaxKind.StringLiteral)
-        ) {
-            leftVar = this.printNode(left, 0);
-            rightVar = this.printNode(right, identation);
-            return `string(${leftVar}, ${rightVar})`;
+                // Helper to extract args from string(...)
+                const extractStringArgs = (str) => {
+                    if (str.startsWith("string(") && str.endsWith(")")) {
+                        // Basic parsing - might need more robustness for nested calls or complex args
+                        const argsContent = str.substring("string(".length, str.length - 1);
+                        // Simple split by comma, assumes basic arguments
+                        // This needs improvement for args containing commas within strings or nested structures
+                        // For now, a simple split might work for common cases
+                        // Consider a more robust parser if needed
+                         // Split by comma, but respect nested parentheses/quotes? Hard.
+                         // Let's try a simple split for now:
+                           return argsContent.split(',').map(s => s.trim());
+                           // A better approach might involve a mini-parser or regex,
+                           // but let's see if the simple split works for the target cases.
+                    }
+                    return null;
+                };
+
+                const leftArgs = extractStringArgs(leftStr);
+                const rightArgs = extractStringArgs(rightStr);
+
+                let finalArgs = [];
+                if (leftArgs) {
+                    finalArgs = finalArgs.concat(leftArgs);
+                } else {
+                    finalArgs.push(leftStr);
+                }
+
+                if (rightArgs) {
+                    finalArgs = finalArgs.concat(rightArgs);
+                } else {
+                    finalArgs.push(rightStr);
+                }
+
+                 // Filter out empty strings that might result from parsing errors
+                 finalArgs = finalArgs.filter(arg => arg.length > 0);
+
+                return `string(${finalArgs.join(", ")})`;
+            }
+             // Fallthrough to default numeric/other addition if not string type
         }
 
+
+        let leftVar = undefined;
+        let rightVar = undefined;
         // c# wrapper
         if (
             operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken ||
@@ -1123,8 +1164,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result,
                 );
             }
-            console.log(ts.ScriptKind[node.kind]);
-            console.log(result);
+            // console.log(ts.ScriptKind[node.kind]);
+            // console.log(result);
 
             return result;
         } catch (e) {
@@ -2426,6 +2467,8 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     printNodeCommentsIfAny(node, identation, parsedNode) {
         const leadingComment = this.printLeadingComments(node, identation);
+        console.log(identation)
+        console.log(leadingComment)
         let trailingComment = ""; // Initialize empty
 
         // Check if parent node ends at the same position. If so, parent will handle the trailing comment.

@@ -23,7 +23,7 @@
     "build": "npm run lint &&  tsup src/transpiler.ts --format cjs,esm --dts --clean --splitting --shims",
     "build2": "npm run lint && tsc",
     "start": "node --loader ts-node/esm run.ts",
-    "start-jl": "node --loader ts-node/esm src/juliaTranspilerDS.ts",
+    "start-jl": "node --loader ts-node/esm src/juliaTranspiler.ts",
     "start-py": "node --loader ts-node/esm src/pythonTranspiler.ts",
     "test-ci": "jest --ci --coverage",
     "test": "jest --verbose",

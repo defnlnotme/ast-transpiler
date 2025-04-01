@@ -748,6 +748,13 @@ a = raw"bar"; # I'm second trailing comment
         expect(output).toBe(julia);
     });
 
+    test('string concat 2', () => {
+        const ts = `this.id + ' ' + body;`
+        const julia = `string(self.id, raw" ", body);\n`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
     test('string literal replacements', () => {
         transpiler.setJuliaStringLiteralReplacements({
             'sha256': 'SHA.sha256',
