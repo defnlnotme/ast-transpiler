@@ -150,7 +150,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableStatement,
         identation: number,
     ): string {
-        console.log(
+        console.debug(
             "Entering printVariableStatement function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
@@ -176,7 +176,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableDeclarationList,
         identation: number,
     ): string {
-        console.log(
+        console.debug(
             "Entering printVariableDeclarationList function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
@@ -193,7 +193,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableDeclaration,
         identation: number,
     ): string {
-        console.log(
+        console.debug(
             "Entering printVariableDeclaration function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
@@ -787,15 +787,15 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printIfStatement(node, identation) {
-        console.log("printIfStatement called with identation:", identation);
-        console.log("Node kind:", ts.SyntaxKind[node.kind]);
+        console.debug("printIfStatement called with identation:", identation);
+        console.debug("Node kind:", ts.SyntaxKind[node.kind]);
 
         // Ensure identation is never negative
         identation = Math.max(0, identation);
 
         // Get the condition expression
         const expression = this.printCondition(node.expression, 0);
-        console.log("Condition expression:", expression);
+        console.debug("Condition expression:", expression);
 
         // Include 'if' and condition
         let result =
@@ -803,7 +803,7 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // Handle the "then" branch
         if (node.thenStatement) {
-            console.log(
+            console.debug(
                 "thenStatement kind:",
                 ts.SyntaxKind[node.thenStatement.kind],
             );
@@ -811,7 +811,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             if (ts.isBlock(node.thenStatement)) {
                 // For blocks, process each statement with increased identation
                 node.thenStatement.statements.forEach((stmt, index) => {
-                    console.log(
+                    console.debug(
                         `Statement ${index} kind:`,
                         ts.SyntaxKind[stmt.kind],
                     );
@@ -930,7 +930,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Properly close each if block with 'end'
         result += this.getIden(identation) + "end\n";
 
-        console.log("printIfStatement result:", result);
+        console.debug("printIfStatement result:", result);
         return result;
     }
 
@@ -1164,8 +1164,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result,
                 );
             }
-            // console.log(ts.ScriptKind[node.kind]);
-            // console.log(result);
+            // console.debug(ts.ScriptKind[node.kind]);
+            // console.debug(result);
 
             return result;
         } catch (e) {
@@ -2467,8 +2467,6 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     printNodeCommentsIfAny(node, identation, parsedNode) {
         const leadingComment = this.printLeadingComments(node, identation);
-        console.log(identation)
-        console.log(leadingComment)
         let trailingComment = ""; // Initialize empty
 
         // Check if parent node ends at the same position. If so, parent will handle the trailing comment.
