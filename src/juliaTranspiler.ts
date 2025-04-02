@@ -1172,6 +1172,12 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result = this.printContinueStatement(node, 0); // Let func handle indent
                 } else if (ts.isDeleteExpression(node)) {
                     result = this.printDeleteExpression(node, 0); // Let func handle indent
+                } else if (ts.isExportDeclaration(node)) { // <--- ADD THIS BLOCK
+                    // Julia's module system and export mechanisms are different.
+                    // For now, we remove the ES export declarations.
+                    // A more sophisticated approach might involve generating Julia `export`
+                    // statements within a module block, but that's outside the current scope.
+                    result = "";
                 }
                 // ... other specific node types ...
                 else {
