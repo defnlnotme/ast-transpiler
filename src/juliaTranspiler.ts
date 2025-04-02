@@ -8,6 +8,19 @@ import ts, {
 import { TranspilationError } from "./types.js"; // Import TranspilationError
 import { red } from "colorette";
 
+// --- Conditional Debug Logging ---
+// Helper function to log messages only if the JULIA_TRANSPILER_DEBUG environment variable is set.
+// Uses console.log as requested.
+const conditionalDebugLog = (...args: any[]) => {
+    // Check for a specific environment variable, e.g., JULIA_TRANSPILER_DEBUG
+    // Use process.env which is standard in Node.js environments
+    if (process.env.JULIA_TRANSPILER_DEBUG) {
+        console.log(...args); // Use console.log as requested
+    }
+};
+// --- End Conditional Debug Logging ---
+
+
 const SyntaxKind = ts.SyntaxKind;
 
 const parserConfig = {
@@ -150,7 +163,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableStatement,
         identation: number,
     ): string {
-        console.debug(
+        conditionalDebugLog( // Changed from console.debug
             "Entering printVariableStatement function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
@@ -191,7 +204,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableDeclarationList,
         identation: number, // Usually 0 when called from VariableStatement
     ): string {
-        console.debug(
+        conditionalDebugLog( // Changed from console.debug
             "Entering printVariableDeclarationList function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
@@ -209,7 +222,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableDeclaration,
         identation: number,
     ): string {
-        console.debug(
+        conditionalDebugLog( // Changed from console.debug
             "Entering printVariableDeclaration function",
             ts.SyntaxKind[node.kind],
             "Node Name Kind:", ts.SyntaxKind[node.name.kind] // Added log for name kind
@@ -808,15 +821,15 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printIfStatement(node, identation) {
-        console.debug("printIfStatement called with identation:", identation);
-        console.debug("Node kind:", ts.SyntaxKind[node.kind]);
+        conditionalDebugLog("printIfStatement called with identation:", identation); // Changed from console.debug
+        conditionalDebugLog("Node kind:", ts.SyntaxKind[node.kind]); // Changed from console.debug
 
         // Ensure identation is never negative
         identation = Math.max(0, identation);
 
         // Get the condition expression
         const expression = this.printCondition(node.expression, 0);
-        console.debug("Condition expression:", expression);
+        conditionalDebugLog("Condition expression:", expression); // Changed from console.debug
 
         // Include 'if' and condition
         let result =
@@ -824,7 +837,7 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // Handle the "then" branch
         if (node.thenStatement) {
-            console.debug(
+            conditionalDebugLog( // Changed from console.debug
                 "thenStatement kind:",
                 ts.SyntaxKind[node.thenStatement.kind],
             );
@@ -832,7 +845,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             if (ts.isBlock(node.thenStatement)) {
                 // For blocks, process each statement with increased identation
                 node.thenStatement.statements.forEach((stmt, index) => {
-                    console.debug(
+                    conditionalDebugLog( // Changed from console.debug
                         `Statement ${index} kind:`,
                         ts.SyntaxKind[stmt.kind],
                     );
@@ -951,7 +964,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Properly close each if block with 'end'
         result += this.getIden(identation) + "end\n";
 
-        console.debug("printIfStatement result:", result);
+        conditionalDebugLog("printIfStatement result:", result); // Changed from console.debug
         return result;
     }
 
@@ -1163,7 +1176,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 // ... other specific node types ...
                 else {
                     // Fallback for unhandled nodes
-                    console.warn(
+                    console.warn( // Keep console.warn for actual warnings
                         `[${this.id}] Unhandled node kind:`,
                         ts.SyntaxKind[node.kind],
                         "Node text:",
@@ -1189,17 +1202,17 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result,
                 );
             }
-            // console.debug(ts.ScriptKind[node.kind]);
-            // console.debug(result);
+            // conditionalDebugLog(ts.ScriptKind[node.kind]); // Use conditional log if needed
+            // conditionalDebugLog(result); // Use conditional log if needed
 
             return result;
         } catch (e) {
-            // ... (error handling remains the same) ...
-            console.error(
+            // ... (error handling remains the same, use console.error) ...
+            console.error( // Keep console.error for actual errors
                 "Error processing node:",
                 node.getText()?.substring(0, 200),
             ); // Log more text
-            console.error("Error in printNode:", e);
+            console.error("Error in printNode:", e); // Keep console.error for actual errors
             if (e instanceof TranspilationError) {
                 throw e;
             } else {
@@ -2775,7 +2788,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             }
         } else {
             // Fallback or error for unexpected expression types
-            console.warn(
+            console.warn( // Keep console.warn for actual warnings
                 "Unhandled delete expression type:",
                 ts.SyntaxKind[node.expression.kind],
             );
@@ -2835,7 +2848,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         } else {
             // This can happen if ArrayBindingPattern is used elsewhere (e.g., function param)
             // In the context of `const [a,b] = ...`, parent *must* be VariableDeclaration.
-            console.error("ArrayBindingPattern parent is not VariableDeclaration - Unexpected context?");
+            console.error("ArrayBindingPattern parent is not VariableDeclaration - Unexpected context?"); // Keep console.error
             return "#Error: Invalid ArrayBindingPattern context";
         }
 
