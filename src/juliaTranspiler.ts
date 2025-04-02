@@ -159,34 +159,50 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
         let result = "";
         if (node.declarationList) {
-            // Directly print the declaration list content without wrapping in comments here
-            result += this.printNode(node.declarationList, identation);
+            // Pass 0 for indentation as the list itself doesn't have independent indent,
+            // but the declarations within might get indent from their specific print functions if needed.
+            // Let printVariableDeclarationList/printVariableDeclaration handle the core content.
+            result += this.printNode(node.declarationList, 0);
         }
-        // Add the line terminator (semicolon) if it's expected
-        if (result.trim() !== "" && !result.endsWith(";")) {
-            // Check if not empty and doesn't already end with ;
-            // Let VariableDeclaration handle the semicolon if needed
-            result += this.LINE_TERMINATOR; // Use LINE_TERMINATOR if needed, else remove
+        // Add the line terminator (semicolon) if needed, after processing all declarations.
+        // Apply leading indentation to the whole statement result.
+        const trimmedResult = result.trim();
+        if (trimmedResult !== "") {
+             // If the result doesn't already end with the terminator (e.g. complex statements might add their own)
+            if (!trimmedResult.endsWith(this.LINE_TERMINATOR)) {
+                 result += this.LINE_TERMINATOR;
+            }
+             // Apply outer indentation
+            // NOTE: If printNode for declaration list somehow adds its own unwanted indent, this might double it.
+            // Need to ensure printVariableDeclarationList/printVariableDeclaration don't add outer indent.
+            result = this.getIden(identation) + result; // Apply identation here
+            // Add newline if the result doesn't end with one (blocks typically do)
+            if (!result.endsWith('\n')) {
+                // result += '\n'; // Temporarily removed as tests don't expect extra newlines after simple vars
+            }
+        } else {
+            result = ""; // Ensure empty result if content was empty
         }
-        // Comments will be handled by the caller printNode via printNodeCommentsIfAny
-        return result;
+
+        return result; // Return potentially empty string or the formatted statement
     }
 
     printVariableDeclarationList(
         node: ts.VariableDeclarationList,
-        identation: number,
+        identation: number, // Usually 0 when called from VariableStatement
     ): string {
         console.debug(
             "Entering printVariableDeclarationList function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
-        let result = "";
-        node.declarations.forEach((declaration) => {
-            // Directly print the declaration content without wrapping in comments here
-            result += this.printVariableDeclaration(declaration, identation);
-        });
-        // Comments will be handled by the caller printNode via printNodeCommentsIfAny
-        return result;
+        // Process declarations and join them. Semicolons/newlines are handled by VariableStatement.
+        // Pass 0 for indentation to declarations, as VariableStatement handles the line indent.
+        return node.declarations.map((declaration) => {
+            return this.printVariableDeclaration(declaration, 0); // Pass 0 indent
+        }).filter(d => d.trim() !== "").join(", "); // Join multiple declarations if needed (though less common in TS community code)
+        // Note: Joining with ", " might be wrong if Julia expects separate lines.
+        // Assuming one declaration per statement for now based on tests. If multiple needed, revise joiner.
+        // Returning the raw content, VariableStatement adds terminator/newline/indent.
     }
 
     printVariableDeclaration(
@@ -196,55 +212,55 @@ export class JuliaTranspiler extends BaseTranspiler {
         console.debug(
             "Entering printVariableDeclaration function",
             ts.SyntaxKind[node.kind],
-        ); // Debug log
-        // Handle function expression assignment specifically
-        if (
-            node.initializer &&
-            (ts.isFunctionExpression(node.initializer) ||
-                ts.isArrowFunction(node.initializer)) &&
-            this.removeVariableDeclarationForFunctionExpression === false
-        ) {
-            // Use the specific function printing logic if we're NOT removing the variable declaration
-            let varName = "";
-            if (ts.isIdentifier(node.name)) {
-                varName = node.name.escapedText as string;
-            } else {
-                varName = this.printNode(node.name, 0); // Fallback
-            }
-            // Delegate to a function that handles function expression assignment
-            return this.printFunctionExpressionAsDeclaration(
-                node.initializer,
-                varName,
-            );
-        }
+            "Node Name Kind:", ts.SyntaxKind[node.name.kind] // Added log for name kind
+        );
 
-        let result = "";
-        let varName = "";
-        if (ts.isIdentifier(node.name)) {
-            varName = node.name.escapedText as string;
-        } else {
-            varName = this.printNode(node.name, 0); // Fallback for other BindingName types
-        }
-
+        const nameNode = node.name;
         const initializer = node.initializer;
 
-        if (initializer && !ts.isFunctionExpression(initializer)) {
-            // Standard variable declaration with initializer
-            const printedInitializer = this.printNode(initializer, 0);
-            result += `${varName} = ${printedInitializer}`; // REMOVED semicolon here
-        } else if (!initializer) {
-            // Variable declaration without initializer
-            result += `${varName}`; // REMOVED semicolon here
-        } else if (
+        // Handle Function Expression Assignment first
+        if (
             initializer &&
-            ts.isFunctionExpression(initializer) &&
-            this.removeVariableDeclarationForFunctionExpression === true
+            (ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer)) &&
+            this.removeVariableDeclarationForFunctionExpression === false
         ) {
-            // If it IS a function expression AND we want to remove the var decl, print just the function
-            return this.printNode(initializer, identation); // Let printNode handle the FunctionExpression
+            let varName = "#FUNC_ASSIGN_ERROR#"; // Placeholder
+             if (ts.isIdentifier(nameNode)) {
+                varName = nameNode.escapedText as string;
+             } else {
+                 // Need to handle assignment to patterns carefully here if needed
+                 varName = this.printNode(nameNode, 0); // Fallback
+             }
+            return this.printFunctionExpressionAsDeclaration(initializer, varName);
         }
-        // Comments are handled by the outer `printNode` calling `printNodeCommentsIfAny` on the parent statement.
-        return result.trim();
+
+        // Handle Array Binding Pattern
+        if (ts.isArrayBindingPattern(nameNode)) {
+            // Let printArrayBindingPattern handle the entire "LHS = RHS" structure
+            // Pass the pattern node itself to printNode which will delegate
+            return this.printNode(nameNode, 0); // This delegates to printArrayBindingPattern
+        }
+
+        // Handle simple Identifier
+        if (ts.isIdentifier(nameNode)) {
+            const varName = nameNode.escapedText as string;
+            if (initializer) {
+                // If the initializer was a function expression, it should have been caught above
+                 const printedInitializer = this.printNode(initializer, 0);
+                 // printVariableStatement will add the semicolon
+                 return `${varName} = ${printedInitializer}`; // Return directly, NO SEMICOLON here
+            } else {
+                // Julia requires initialization or type annotation.
+                 return ""; // Return empty for uninitialized simple vars for now.
+            }
+        }
+
+        // Fallback/Error for other complex BindingName types (e.g., ObjectBindingPattern)
+         console.warn("Unhandled BindingName type in printVariableDeclaration:", ts.SyntaxKind[nameNode.kind]);
+         const printedName = this.printNode(nameNode, 0);
+         const printedInitializer = initializer ? ` = ${this.printNode(initializer, 0)}` : ' = nothing # TODO: Unhandled complex binding';
+         // printVariableStatement will add the semicolon
+         return `${printedName}${printedInitializer}`; // NO SEMICOLON here
     }
 
     // Helper to map types (ensure it handles Dict correctly)
@@ -518,7 +534,10 @@ export class JuliaTranspiler extends BaseTranspiler {
         if (operatorToken.kind === ts.SyntaxKind.PlusToken) {
             const leftType = global.checker.getTypeAtLocation(left);
             const rightType = global.checker.getTypeAtLocation(right);
-            if (this.isStringType(leftType.flags) || this.isStringType(rightType.flags)) {
+            if (
+                this.isStringType(leftType.flags) ||
+                this.isStringType(rightType.flags)
+            ) {
                 // It's potentially string concatenation
                 let leftStr = this.printNode(left, 0);
                 let rightStr = this.printNode(right, 0); // Print right without extra indent
@@ -527,16 +546,19 @@ export class JuliaTranspiler extends BaseTranspiler {
                 const extractStringArgs = (str) => {
                     if (str.startsWith("string(") && str.endsWith(")")) {
                         // Basic parsing - might need more robustness for nested calls or complex args
-                        const argsContent = str.substring("string(".length, str.length - 1);
+                        const argsContent = str.substring(
+                            "string(".length,
+                            str.length - 1,
+                        );
                         // Simple split by comma, assumes basic arguments
                         // This needs improvement for args containing commas within strings or nested structures
                         // For now, a simple split might work for common cases
                         // Consider a more robust parser if needed
-                         // Split by comma, but respect nested parentheses/quotes? Hard.
-                         // Let's try a simple split for now:
-                           return argsContent.split(',').map(s => s.trim());
-                           // A better approach might involve a mini-parser or regex,
-                           // but let's see if the simple split works for the target cases.
+                        // Split by comma, but respect nested parentheses/quotes? Hard.
+                        // Let's try a simple split for now:
+                        return argsContent.split(",").map((s) => s.trim());
+                        // A better approach might involve a mini-parser or regex,
+                        // but let's see if the simple split works for the target cases.
                     }
                     return null;
                 };
@@ -557,14 +579,13 @@ export class JuliaTranspiler extends BaseTranspiler {
                     finalArgs.push(rightStr);
                 }
 
-                 // Filter out empty strings that might result from parsing errors
-                 finalArgs = finalArgs.filter(arg => arg.length > 0);
+                // Filter out empty strings that might result from parsing errors
+                finalArgs = finalArgs.filter((arg) => arg.length > 0);
 
                 return `string(${finalArgs.join(", ")})`;
             }
-             // Fallthrough to default numeric/other addition if not string type
+            // Fallthrough to default numeric/other addition if not string type
         }
-
 
         let leftVar = undefined;
         let rightVar = undefined;
@@ -1103,7 +1124,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 } else if ((ts as any).isBooleanLiteral(node)) {
                     result = this.printBooleanLiteral(node);
                 } else if (ts.SyntaxKind.ThisKeyword === node.kind) {
-                    result = this.THIS_TOKEN;
+                    result = this.THIS_TOKEN; // Should be removed or handled contextually for Julia
                 } else if (ts.SyntaxKind.SuperKeyword === node.kind) {
                     result = this.SUPER_TOKEN;
                 } else if (ts.isTryStatement(node)) {
@@ -1122,24 +1143,28 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result = this.printAsExpression(node, 0); // Expressions usually don't need outer indent
                 } else if (ts.isReturnStatement(node)) {
                     result = this.printReturnStatement(node, 0); // Let func handle indent
-                } else if (ts.isContinueStatement(node)) {
-                    result = this.printContinueStatement(node, 0); // Let func handle indent
-                } else if (ts.isDeleteExpression(node)) {
-                    result = this.printDeleteExpression(node, 0); // Let func handle indent
+                } else if (ts.isArrayBindingPattern(node)) {
+                    result = this.printArrayBindingPattern(node, identation);
+                } else if (ts.isParameter(node)) {
+                    result = this.printParameter(node);
                 } else if (ts.isConstructorDeclaration(node)) {
                     result = this.printConstructorDeclaration(node, identation); // Pass indentation
                 } else if (ts.isPropertyDeclaration(node)) {
                     result = this.printPropertyDeclaration(node, 0); // Let func handle indent - usually within a class
-                } else if (ts.SyntaxKind.NullKeyword === node.kind) {
-                    result = this.printNullKeyword(node, 0); // Let func handle indent
                 } else if (ts.isSpreadElement(node)) {
                     result = this.printSpreadElement(node, 0); // Let func handle indent
+                } else if (ts.SyntaxKind.NullKeyword === node.kind) {
+                    result = this.printNullKeyword(node, 0); // Let func handle indent
+                } else if (ts.isContinueStatement(node)) {
+                    result = this.printContinueStatement(node, 0); // Let func handle indent
+                } else if (ts.isDeleteExpression(node)) {
+                    result = this.printDeleteExpression(node, 0); // Let func handle indent
                 }
                 // ... other specific node types ...
                 else {
                     // Fallback for unhandled nodes
                     console.warn(
-                        "Unhandled node kind in JuliaTranspiler printNode:",
+                        `[${this.id}] Unhandled node kind:`,
                         ts.SyntaxKind[node.kind],
                         "Node text:",
                         node.getText()?.substring(0, 100), // Log snippet
@@ -2693,9 +2718,12 @@ export class JuliaTranspiler extends BaseTranspiler {
         // We need to replicate the JS behavior.
         const letBlockVar = "v"; // Temporary variable name
         // Using base indentation (passed identation) for the 'let' keyword
-        let result = this.getIden(identation) + `let ${letBlockVar} = findfirst(${parsedArg}, ${name});\n`;
+        let result =
+            this.getIden(identation) +
+            `let ${letBlockVar} = findfirst(${parsedArg}, ${name});\n`;
         // Using identation + 1 for the contents of the let block
-        result += this.getIden(identation + 1) + `if ${letBlockVar} == nothing\n`;
+        result +=
+            this.getIden(identation + 1) + `if ${letBlockVar} == nothing\n`;
         result += this.getIden(identation + 2) + `-1\n`; // JS returns -1 if not found
         result += this.getIden(identation + 1) + `else\n`;
         // Using identation + 2 for the content inside else
@@ -2715,7 +2743,10 @@ export class JuliaTranspiler extends BaseTranspiler {
         return this.getIden(identation) + `isa(${left}, ${right})`;
     }
 
-    printDeleteExpression(node: ts.DeleteExpression, identation: number): string {
+    printDeleteExpression(
+        node: ts.DeleteExpression,
+        identation: number,
+    ): string {
         // Expecting node.expression to be a PropertyAccessExpression like myObject.property
         // or an ElementAccessExpression like myObject['property']
         if (ts.isPropertyAccessExpression(node.expression)) {
@@ -2727,25 +2758,28 @@ export class JuliaTranspiler extends BaseTranspiler {
             const argumentExpr = node.expression.argumentExpression;
             // Handle string literal access like myObject['property'] -> delete!(myObject, :property)
             if (ts.isStringLiteral(argumentExpr)) {
-                 const propertyName = argumentExpr.text;
-                 return `${this.getIden(identation)}delete!(${objectName}, :${propertyName})`;
+                const propertyName = argumentExpr.text;
+                return `${this.getIden(identation)}delete!(${objectName}, :${propertyName})`;
             }
             // Handle variable access like myObject[key] -> delete!(myObject, Symbol(key))
-            else  {
+            else {
                 // check if the variable is a string
                 const type = global.checker.getTypeAtLocation(argumentExpr);
-                if (this.isStringType(type.flags)){
-                     const propertyVar = this.printNode(argumentExpr, 0);
-                     return `${this.getIden(identation)}delete!(${objectName}, ${propertyVar})`; // Julia uses the string variable directly
+                if (this.isStringType(type.flags)) {
+                    const propertyVar = this.printNode(argumentExpr, 0);
+                    return `${this.getIden(identation)}delete!(${objectName}, ${propertyVar})`; // Julia uses the string variable directly
                 }
-                 // Default or other types: Convert variable to Symbol
+                // Default or other types: Convert variable to Symbol
                 const propertyVar = this.printNode(argumentExpr, 0);
                 return `${this.getIden(identation)}delete!(${objectName}, Symbol(${propertyVar}))`;
             }
         } else {
             // Fallback or error for unexpected expression types
-             console.warn("Unhandled delete expression type:", ts.SyntaxKind[node.expression.kind]);
-             return `${this.getIden(identation)}# TODO: Unhandled delete expression: ${this.printNode(node.expression, 0)}`;
+            console.warn(
+                "Unhandled delete expression type:",
+                ts.SyntaxKind[node.expression.kind],
+            );
+            return `${this.getIden(identation)}# TODO: Unhandled delete expression: ${this.printNode(node.expression, 0)}`;
         }
     }
 
@@ -2781,5 +2815,93 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
         // Fallback for incorrect number of arguments, although TS would likely catch this
         return `@assert ${parsedArgs}`; // Or handle error
+    }
+
+    printArrayBindingPattern(node: ts.ArrayBindingPattern, identation: number): string {
+        // Indentation is usually handled by the parent VariableStatement/ForStatement etc.
+        const elements = node.elements.map((e) => {
+            if (ts.isBindingElement(e)) {
+                // Recurse for nested patterns or print identifier
+                return this.printNode(e.name, 0);
+            }
+             // Handle OmittedExpressionElement if necessary
+            return '#OMITTED#';
+        }).join(", ");
+
+        // Find the VariableDeclaration parent to get the initializer
+        let parentDeclaration: ts.VariableDeclaration | undefined = undefined;
+        if (node.parent && ts.isVariableDeclaration(node.parent)) {
+            parentDeclaration = node.parent;
+        } else {
+            // This can happen if ArrayBindingPattern is used elsewhere (e.g., function param)
+            // In the context of `const [a,b] = ...`, parent *must* be VariableDeclaration.
+            console.error("ArrayBindingPattern parent is not VariableDeclaration - Unexpected context?");
+            return "#Error: Invalid ArrayBindingPattern context";
+        }
+
+        const initializer = parentDeclaration.initializer;
+        let rightExpression = '()'; // Default to empty tuple
+
+        if (initializer) {
+            // Print the initializer node
+            let printedInitializer = this.printNode(initializer, 0); // e.g., gets "[1, 2]" from ArrayLiteral
+             // Check if the *original* initializer was an ArrayLiteralExpression
+             // AND if the printed result looks like a Julia array `[...]`
+            if (ts.isArrayLiteralExpression(initializer) && printedInitializer.startsWith('[') && printedInitializer.endsWith(']')) {
+                // Convert `[el1, el2]` to `(el1, el2)` to match Julia tuple assignment syntax for destructuring
+                 rightExpression = '(' + printedInitializer.substring(1, printedInitializer.length - 1) + ')';
+            } else {
+                 // If initializer wasn't an array literal or didn't print as [...], use its output directly
+                 rightExpression = printedInitializer;
+            }
+        }
+
+        // Construct the full assignment "lhs = rhs" without a semicolon.
+        // The VariableStatement adds the semicolon later.
+        return this.getIden(0) + // No indent needed, parent handles line indent
+               this.LEFT_PARENTHESIS + elements + this.RIGHT_PARENTHESIS +
+               " = " +
+               rightExpression; // NO SEMICOLON HERE
+    }
+
+    printPostFixUnaryExpression(node, identation) {
+        const operand = this.printNode(node.operand, 0);
+        const operator = this.PostFixOperators[node.operator];
+        // Julia does not have direct postfix ++/--. It needs to be on a separate line or handled contextually.
+        // This basic version converts x++ to x += 1; which might be okay in statement contexts.
+        // Be aware this might not work correctly inside complex expressions.
+        if (
+            operator === this.PLUS_PLUS_TOKEN ||
+            operator === this.MINUS_MINUS_TOKEN
+        ) {
+            // We assume this is used as a statement. If used inline, this needs rethinking.
+            return `${operand}${operator}`;
+        }
+        // Fallback for other potential postfix operators if added later
+        return `${operand}${operator}`;
+    }
+
+    printPrefixUnaryExpression(node, identation) {
+        const operand = this.printNode(node.operand, 0);
+        const operator = this.PrefixFixOperators[node.operator];
+        // Handle Julia's ! for negation. Ensure space for 'not'.
+        if (node.operator === ts.SyntaxKind.ExclamationToken) {
+            return `${this.NOT_TOKEN}${operand}`; // Use configured NOT_TOKEN
+        } else if (node.operator === ts.SyntaxKind.MinusToken) {
+            // Standard unary minus
+            return `${operator}${operand}`;
+        } else if (
+            node.operator === ts.SyntaxKind.PlusPlusToken ||
+            node.operator === ts.SyntaxKind.MinusMinusToken
+        ) {
+            // Julia doesn't have prefix increment/decrement. Convert to assignment.
+            // This might be incorrect if the result of the prefix op was expected inline.
+            // Assuming statement context:
+            const assignmentOperator =
+                node.operator === ts.SyntaxKind.PlusPlusToken ? "+=" : "-=";
+            return `${operand} ${assignmentOperator} 1`; // Separate statement assumed
+        }
+        // Fallback for other potential prefix operators
+        return `${operator}${operand}`;
     }
 }

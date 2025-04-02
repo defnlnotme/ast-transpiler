@@ -902,4 +902,38 @@ end`; // Corrected expected output, removed '...'
         expect(output).toBe(julia);
     });
 
+    test('array binding pattern', () => {
+        const ts = "const [a, b] = [1, 2];";
+        const julia = "(a, b) = (1, 2);\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('postfix unary expression', () => {
+        const ts =
+`let i = 0;
+i++;
+let j = 10;
+j--;`;
+        const julia =
+`i = 0;
+i += 1;
+j = 10;
+j -= 1;
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('prefix unary expression - negation', () => {
+        const ts =
+`const yes = true;
+const no = !yes;`;
+        const julia =
+`yes = true;
+no = !yes;
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 });
