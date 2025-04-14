@@ -458,7 +458,7 @@ x[raw"foo"] = raw"bar";
 }`;
         const julia =
 `function testf()
-    throw InvalidOrder(raw"error");
+    throw(InvalidOrder(raw"error"));
 end;
 `;
         const output = transpiler.transpileJulia(ts).content;

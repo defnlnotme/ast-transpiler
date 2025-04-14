@@ -2095,11 +2095,13 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     printThrowStatement(node, identation) {
         const expression = this.printNode(node.expression, 0);
+        // Wrap the expression in parentheses for Julia's throw syntax
         return (
             this.getIden(identation) +
             this.THROW_TOKEN +
-            " " +
+            "(" + // Add opening parenthesis
             expression +
+            ")" + // Add closing parenthesis
             this.LINE_TERMINATOR
         );
     }
