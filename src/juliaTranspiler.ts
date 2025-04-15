@@ -136,7 +136,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             "process.exit": "exit",
             "Number.MAX_SAFE_INTEGER": "typemax(Int)",
             "Number.isInteger": "isinteger",
-            "Array.isArray": "isa(x, Array)", // FIX: this is not correct, should be implemented in printCallExpression
+            // "Array.isArray": "isa(x, Array)", // FIX: Removed - handled by printArrayIsArrayCall
         };
         this.CallExpressionReplacements = {
             parseInt: "parse(Int, ",
@@ -158,6 +158,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         this.currentFunctionName = undefined;
         this.currentFunctionParams = undefined;
     }
+
 
     printVariableStatement(
         node: ts.VariableStatement,
@@ -1396,30 +1397,40 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // check propertyAccessExpression for built in functions calls like Json.parse
         if (node.expression.kind === ts.SyntaxKind.PropertyAccessExpression) {
+            // *** NEW: Check FullPropertyAccessReplacements first ***
+            const expressionTextFull = node.expression.getText().trim();
+            if (this.FullPropertyAccessReplacements.hasOwnProperty(expressionTextFull)) {
+                 // Handle replacements like console.log(...)
+                 return `${this.FullPropertyAccessReplacements[expressionTextFull]}(${parsedArgs})`;
+            }
+            // *** END NEW ***
+
+            // Handle 'this' keyword calls specifically
             if (node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
                 const propertyAccess = this.printPropertyAccessExpression(
                     node.expression,
                     identation,
                 );
                 const functionName = node.expression.name.escapedText;
+                const methodName = this.transformCallExpressionName(
+                    this.unCamelCaseIfNeeded(functionName),
+                );
+                // Prepend 'self' as the first argument
+                const selfArgs = parsedArgs ? "self, " + parsedArgs : "self";
                 return (
-                    propertyAccess.replace(
-                        "self." + functionName,
-                        "self." +
-                            this.transformCallExpressionName(
-                                this.unCamelCaseIfNeeded(functionName),
-                            ),
-                    ) +
+                    propertyAccess.replace("self." + functionName, "self." + methodName) +
                     "(" +
-                    parsedArgs +
+                    selfArgs + // Use args with self prepended
                     ")"
                 );
             }
 
-            const expressionText = node.expression.getText().trim();
+            // Handle built-in function calls (JSON, Math, etc.)
+            const expressionText = node.expression.getText().trim(); // Use the same variable name for consistency
             const args = node.arguments ?? [];
 
-            if (args.length === 1) {
+            // ... (existing checks for JSON.parse, Math.floor, etc.) remain here ...
+             if (args.length === 1) {
                 const parsedArg = this.printNode(args[0], 0);
                 switch (expressionText) {
                     case "JSON.parse":
@@ -1489,6 +1500,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                         return this.printDateNowCall(node, identation);
                 }
             }
+
+            // ... (existing checks for toString, toUpperCase, etc.) remain here ...
             const rightSide = node.expression.name?.escapedText;
             const leftSide = node.expression?.expression;
 
@@ -1544,9 +1557,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                 }
             }
 
-            // handle built in functions like
-
-            const arg = args && args.length > 0 ? args[0] : undefined;
+            // ... (existing checks for push, includes, etc.) remain here ...
+             const arg = args && args.length > 0 ? args[0] : undefined;
 
             if (leftSide && rightSide && arg) {
                 const parsedArg = this.printNode(arg, identation).trimStart();
@@ -1675,6 +1687,20 @@ export class JuliaTranspiler extends BaseTranspiler {
                     }
                 }
             }
+
+             // *** NEW LOGIC for instance method calls ***
+             // Check if the expression's base is an Identifier (likely an instance)
+             // and it's not 'this' (already handled) or a known global/static object
+             const baseExpression = node.expression.expression;
+             const knownGlobals = ["JSON", "Math", "Object", "Array", "Promise", "Date", "Number", "console"]; // Add 'console' here
+             if (ts.isIdentifier(baseExpression) && !knownGlobals.includes(baseExpression.text)) {
+                const instanceName = this.printNode(baseExpression, 0);
+                const methodName = this.printNode(node.expression.name, 0); // Includes potential replacements/uncamelcase
+                const instanceAndArgs = instanceName + (parsedArgs ? ", " + parsedArgs : "");
+                return `${instanceName}.${methodName}(${instanceAndArgs})`;
+             }
+             // *** END NEW LOGIC ***
+
         } else {
             // handle functions like assert
             const args = node.arguments ?? [];
@@ -1693,6 +1719,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             return this.printSuperCallInsideConstructor(node, identation);
         }
 
+        // Generic fallback call expression handling
         let parsedExpression = undefined;
         if (
             this.CallExpressionReplacements.hasOwnProperty(expression.getText())
@@ -1707,7 +1734,12 @@ export class JuliaTranspiler extends BaseTranspiler {
                     this.unCamelCaseIfNeeded(idValue),
                 );
             } else {
-                parsedExpression = this.printNode(expression, 0);
+                // If it's a PropertyAccessExpression that wasn't handled above, print it
+                 if (ts.isPropertyAccessExpression(expression)) {
+                     parsedExpression = this.printPropertyAccessExpression(expression, 0);
+                 } else {
+                    parsedExpression = this.printNode(expression, 0); // General fallback
+                 }
             }
         }
 

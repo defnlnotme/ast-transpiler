@@ -206,8 +206,8 @@ end
 }`;
         const julia =
 `@async function camelCase()
-    self.myFunc();
-    self.loadMarkets();
+    self.myFunc(self);
+    self.loadMarkets(self);
 end;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -223,8 +223,8 @@ end;
 }`;
         const julia =
 `function camelCase()
-    self.myFunc();
-    self.loadMarkets();
+    self.myFunc(self);
+    self.loadMarkets(self);
 end;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -681,7 +681,7 @@ z = x;
 }`;
         const julia =
 `function camel_case()
-    self.my_func();
+    self.my_func(self);
     my_func();
 end;
 `;
@@ -695,7 +695,7 @@ end;
 `let promises = [this.fetchSwapAndFutureMarkets(params), this.fetchUSDCMarkets(params)];
 promises = await Promise.all(promises);`;
         const julia =
-`promises = [self.fetchSwapAndFutureMarkets(params), self.fetchUSDCMarkets(params)];
+`promises = [self.fetchSwapAndFutureMarkets(self, params), self.fetchUSDCMarkets(self, params)];
 promises = [fetch(p) for p in promises];
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -933,6 +933,13 @@ const no = !yes;`;
 `yes = true;
 no = !yes;
 `;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+
+    test('method call with instance as first argument', () => {
+        const ts = 'instance.mymethod(4)';
+        const julia = 'instance.mymethod(instance, 4);\n';
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
