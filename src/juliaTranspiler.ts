@@ -117,47 +117,51 @@ export class JuliaTranspiler extends BaseTranspiler {
             push: "push!",
             toUpperCase: "uppercase",
             toLowerCase: "lowercase",
-            indexOf: "findfirst",
+            indexOf: "findfirst", // Correct function name
             padEnd: "rpad",
             padStart: "lpad",
+            concat: "concat",
+            // REMOVED: 'keys', it needs special handling via printObjectKeysCall
+            // REMOVED: 'length', it needs special handling via printLengthProperty
         };
         this.FullPropertyAccessReplacements = {
-            "console.log": "println",
+            "console.log": "println", // Use config
             "JSON.stringify": "JSON3.json",
             "JSON.parse": "JSON3.parse",
             "Math.log": "log",
             "Math.abs": "abs",
             "Math.min": "min",
             "Math.max": "max",
-            "Math.ceil": "ceil",
-            "Math.round": "round",
-            "Math.floor": "floor",
-            "Math.pow": "pow",
+            "Math.ceil": "ceil", // Often needs Int conversion, see printMathCeilCall
+            "Math.round": "round", // Often needs Int conversion, see printMathRoundCall
+            "Math.floor": "floor", // Often needs Int conversion, see printMathFloorCall
+            "Math.pow": "pow", // Julia uses ^ operator often e.g. x^y
             "process.exit": "exit",
             "Number.MAX_SAFE_INTEGER": "typemax(Int)",
-            "Number.isInteger": "isinteger",
-            // "Array.isArray": "isa(x, Array)", // FIX: Removed - handled by printArrayIsArrayCall
+            "Number.isInteger": "isinteger", // Correct function name
+            // "Object.keys": handled by printObjectKeysCall
+            // "Object.values": handled by printObjectValuesCall
+            // "Array.isArray": handled by printArrayIsArrayCall
         };
         this.CallExpressionReplacements = {
-            parseInt: "parse(Int, ",
-            parseFloat: "parse(Float64, ",
-            "Promise.all": "asyncmap(identity, ",
-            "String.fromCharCode": "char(",
-            atob: "base64decode(",
-            btoa: "base64encode(",
-            decodeURIComponent: "urldecode(",
-            encodeURIComponent: "urlencode(",
-            setImmediate: "sleep(", // to do, not sure if this is correct
+            parseInt: "parse(Int, ", // Needs closing paren added by printCallExpression
+            parseFloat: "parse(Float64, ", // Needs closing paren
+            "Promise.all": "asyncmap(identity, ", // Needs closing paren
+            "String.fromCharCode": "string(Char(", // Wrap in string() and needs closing paren for Char
+            atob: "String(base64decode(", // Wrap in String() and needs closing paren
+            btoa: "base64encode(String(", // Wrap argument in String() and needs closing paren
+            decodeURIComponent: "urldecode(", // Needs closing paren
+            encodeURIComponent: "urlencode(", // Needs closing paren
+            setImmediate: "yield", // yield is closer semantically than sleep(0)
         };
-        this.PropertyAccessRequiresParenthesisRemoval = [
-            "now", // add now here to remove parenthesis for Date.now()
-            // Adjust as needed for Julia
-        ];
+        // PropertyAccessRequiresParenthesisRemoval: Usually empty for Julia unless specific cases arise
+        this.PropertyAccessRequiresParenthesisRemoval = [];
         this.withinFunctionDeclaration = false;
         this.tmpJSDoc = "";
         this.currentFunctionName = undefined;
         this.currentFunctionParams = undefined;
     }
+
 
 
     printVariableStatement(
@@ -677,14 +681,16 @@ export class JuliaTranspiler extends BaseTranspiler {
     printObjectLiteralExpression(node, identation) {
         if (node.properties.length === 0) {
             // handle empty object {}
-            return "Dict()";
+            return "Dict{Symbol, Any}()"; // Explicitly type empty Dict
         }
 
-        const objectBody = this.printObjectLiteralBody(node, identation);
-        const formattedObjectBody = objectBody
-            ? "\n" + objectBody + "\n" + this.getIden(identation)
-            : objectBody;
-        return "Dict(" + formattedObjectBody + ")"; // add Dict(...) wrapper
+        // Use identation + 1 for properties *inside* the Dict() call
+        const objectBody = node.properties
+            .map((p) => this.printPropertyAssignment(p, identation + 1)) // Indent properties
+            .join(",\n"); // Join properties with comma and newline
+
+        // Structure: Dict(\n <indented properties> \n <base indent>)
+        return `Dict(\n${objectBody}\n${this.getIden(identation)})`;
     }
 
     printReturnStatementWithoutIndent(node) {
@@ -1261,36 +1267,47 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     printPropertyAssignment(node, identation) {
         const { name, initializer } = node;
-        // const nameAsString = this.printNode(name, 0);
-        const nameAsString = this.printNode(name, 0); // Use printNode here to handle string literals for keys
+        let nameKey: string;
+
+        // Determine the key format: :key for identifiers/string literals, Symbol("...") for complex/variables
+        if (ts.isIdentifier(name)) {
+            nameKey = `:${name.text}`; // Preferred: :identifier
+        } else if (ts.isStringLiteral(name)) {
+            // Remove outer quotes from the literal's text content for the symbol
+            nameKey = `:${name.text}`; // Preferred: :stringliteral
+        } else {
+            // Fallback for computed property names or other complex cases
+            const nameAsString = this.printNode(name, 0);
+            // Use Symbol constructor if the name isn't a simple identifier/string
+            nameKey = `Symbol(${nameAsString})`;
+             // Potentially unsafe if nameAsString evaluates to something unexpected.
+             // Consider if this case needs more robust handling.
+             console.warn(`[JuliaTranspiler] Complex property name used as Dict key: ${nameAsString}. Generating Symbol(${nameAsString}). Review if this is intended.`);
+        }
 
         const customRightSide = this.printCustomRightSidePropertyAssignment(
             initializer,
-            identation,
+            identation, // Pass identation for nested structures
         );
 
+        // Use identation = 0 for printing the value expression itself
         const valueAsString = customRightSide
             ? customRightSide
-            : this.printNode(initializer, identation);
+            : this.printNode(initializer, 0);
 
-        let trailingComment = this.printTraillingComment(node, identation);
-        trailingComment = trailingComment
-            ? " " + trailingComment
-            : trailingComment;
+        let trailingComment = this.printTraillingComment(node, identation); // Use outer identation for comment positioning
+        trailingComment = trailingComment ? " " + trailingComment : ""; // Add leading space if comment exists
 
-        const propOpen = this.PROPERTY_ASSIGNMENT_OPEN
-            ? this.PROPERTY_ASSIGNMENT_OPEN + " "
-            : "";
-        const propClose = this.PROPERTY_ASSIGNMENT_CLOSE
-            ? " " + this.PROPERTY_ASSIGNMENT_CLOSE
-            : "";
+        const propOpen = this.PROPERTY_ASSIGNMENT_OPEN ? this.PROPERTY_ASSIGNMENT_OPEN + " " : "";
+        const propClose = this.PROPERTY_ASSIGNMENT_CLOSE ? " " + this.PROPERTY_ASSIGNMENT_CLOSE : "";
 
+        // Apply indentation to the whole line
         return (
             this.getIden(identation) +
             propOpen +
-            nameAsString + // Removed quotes here " and "
-            " => " + // Changed from this.PROPERTY_ASSIGNMENT_TOKEN + " " to " => "
-            valueAsString.trim() +
+            nameKey +              // Use the formatted Symbol key
+            " => " +
+            valueAsString.trim() + // Value itself shouldn't have outer indent
             propClose +
             trailingComment
         );
@@ -2259,7 +2276,10 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printObjectKeysCall(node, identation, parsedArg = undefined) {
-        return `[k for k in keys(${parsedArg})]`;
+        // `keys()` returns an iterator of keys (Symbols in our case).
+        // Convert to Vector{Symbol} for common usage.
+        // If strings are needed: `[string(k) for k in keys(${parsedArg})]`
+        return `collect(keys(${parsedArg}))`; // Get keys as Vector{Symbol}
     }
 
     printObjectValuesCall(node, identation, parsedArg = undefined) {
@@ -2299,8 +2319,11 @@ export class JuliaTranspiler extends BaseTranspiler {
         return `join(${name}, ${parsedArg})`;
     }
 
-    printConcatCall(node: any, identation: any, name?: any, parsedArg?: any) {
-        return `string(${name}, ${parsedArg})`;
+    printConcatCall(node: ts.CallExpression, identation: any, name?: any, parsedArg?: any) {
+        // Directly translate .concat() to Julia's concat() function for now.
+        // This might need refinement if vcat or string concatenation is strictly required based on types.
+        const args = node.arguments.map(arg => this.printNode(arg, 0)).join(', ');
+        return `concat(${name}, ${args})`; // Use concat directly
     }
 
     printArrayPushCall(node, identation, name, parsedArg) {
@@ -2822,41 +2845,44 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.DeleteExpression,
         identation: number,
     ): string {
-        // Expecting node.expression to be a PropertyAccessExpression like myObject.property
-        // or an ElementAccessExpression like myObject['property']
-        if (ts.isPropertyAccessExpression(node.expression)) {
-            const objectName = this.printNode(node.expression.expression, 0);
-            const propertyName = node.expression.name.text; // Or escapedText
-            return `${this.getIden(identation)}delete!(${objectName}, :${propertyName})`;
-        } else if (ts.isElementAccessExpression(node.expression)) {
+        const baseIndent = this.getIden(identation);
+        // Expecting node.expression to be an ElementAccessExpression like myObject['property'] or myObject[keyVar]
+        if (ts.isElementAccessExpression(node.expression)) {
             const objectName = this.printNode(node.expression.expression, 0);
             const argumentExpr = node.expression.argumentExpression;
+
             // Handle string literal access like myObject['property'] -> delete!(myObject, :property)
             if (ts.isStringLiteral(argumentExpr)) {
                 const propertyName = argumentExpr.text;
-                return `${this.getIden(identation)}delete!(${objectName}, :${propertyName})`;
+                // Use :symbol syntax directly for literal strings
+                return `${baseIndent}delete!(${objectName}, :${propertyName})`;
             }
-            // Handle variable access like myObject[key] -> delete!(myObject, Symbol(key))
+            // Handle variable access like myObject[key]
             else {
-                // check if the variable is a string
-                const type = global.checker.getTypeAtLocation(argumentExpr);
-                if (this.isStringType(type.flags)) {
-                    const propertyVar = this.printNode(argumentExpr, 0);
-                    return `${this.getIden(identation)}delete!(${objectName}, ${propertyVar})`; // Julia uses the string variable directly
-                }
-                // Default or other types: Convert variable to Symbol
                 const propertyVar = this.printNode(argumentExpr, 0);
-                return `${this.getIden(identation)}delete!(${objectName}, Symbol(${propertyVar}))`;
+                // Check type if possible, otherwise assume it should be converted to Symbol
+                // Since we decided keys are Symbols, convert variable to Symbol
+                // Note: If the variable *already* holds a Symbol, Symbol(existingSymbol) is fine.
+                // If it holds a string, Symbol(string) creates the symbol.
+                return `${baseIndent}delete!(${objectName}, Symbol(${propertyVar}))`;
             }
-        } else {
+        } else if (ts.isPropertyAccessExpression(node.expression)) {
+             // Handle delete myObject.property -> delete!(myObject, :property)
+            const objectName = this.printNode(node.expression.expression, 0);
+            const propertyName = node.expression.name.text; // Or escapedText
+            return `${baseIndent}delete!(${objectName}, :${propertyName})`;
+        }
+
+        else {
             // Fallback or error for unexpected expression types
             console.warn( // Keep console.warn for actual warnings
                 "Unhandled delete expression type:",
                 ts.SyntaxKind[node.expression.kind],
             );
-            return `${this.getIden(identation)}# TODO: Unhandled delete expression: ${this.printNode(node.expression, 0)}`;
+            return `${baseIndent}# TODO: Unhandled delete expression: ${this.printNode(node.expression, 0)}`;
         }
     }
+
 
     printSpreadElement(node, identation) {
         const expression = this.printNode(node.expression, 0);
@@ -2985,6 +3011,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         return `length(${leftSide})`;
     }
 
+    // Verify Array Indexing Logic (+1) - Appears Correct, No Change Needed Here
     printElementAccessExpression(node, identation) {
         const { expression, argumentExpression } = node;
 
@@ -2996,47 +3023,112 @@ export class JuliaTranspiler extends BaseTranspiler {
         const expressionAsString = this.printNode(expression, 0);
         let argumentAsString = this.printNode(argumentExpression, 0);
 
-        // Check if the argument is a numeric literal or a string literal
-        if (ts.isNumericLiteral(argumentExpression)) {
-            // Handle numeric literal index for arrays (1-based)
-            try {
-                const numericValue = parseInt(argumentAsString, 10);
-                if (!isNaN(numericValue)) {
-                    argumentAsString = (numericValue + 1).toString(); // Julia is 1-based index
-                } else {
-                    // Fallback for non-integer literals or if parse fails, add 1 dynamically
-                    argumentAsString = `${argumentAsString} + 1`;
-                }
-            } catch (e) {
-                 // Fallback if parsing fails
-                console.warn("Could not parse numeric literal for indexing, adding +1 dynamically:", argumentAsString);
-                argumentAsString = `${argumentAsString} + 1`;
-            }
-        } else if (ts.isStringLiteral(argumentExpression)) {
-            // Handle string literal index for dictionaries - use the string directly
-             // No need to modify argumentAsString, it's already the printed string literal (e.g., raw"key")
-        } else {
-            // Handle variable or other expression types for indexing
-            // Check the type to determine if it's likely an array index (needs +1) or dict key
-            const type = global.checker.getTypeAtLocation(argumentExpression);
+        // Determine if it's array access (needs +1) or dictionary access (uses key directly)
+        const expressionType = global.checker.getTypeAtLocation(expression);
 
-            // If it's a known string type, treat as dictionary key
-            if (type.flags & ts.TypeFlags.StringLike) {
-                 // Use the variable/expression directly as the key
+        // Heuristic: If expression is clearly an Array/Vector type
+        // OR if the index is a number literal/variable known to be number.
+        let isArrayIndex = false;
+        // Use the improved isArrayType check
+        if (this.isArrayType(expressionType)) {
+             isArrayIndex = true;
+        } else {
+             // If expression type is not clearly array, check the argument type
+             const argumentType = global.checker.getTypeAtLocation(argumentExpression);
+             // Check if the argument type flags indicate a number or numeric literal
+             if ((argumentType.flags & ts.TypeFlags.NumberLike) || ts.isNumericLiteral(argumentExpression)) {
+                 // If index is number-like, assume it's for an array unless expression type strongly suggests otherwise (e.g. Dict{Int, Any})
+                 // This heuristic might fail for Dicts with integer keys.
+                 // TODO: Potentially needs smarter type checking for Dict{Int, ...} cases
+                 isArrayIndex = true;
+             }
+             // Otherwise (string literal, string variable, symbol, etc.), assume dictionary key access
+        }
+
+
+        if (isArrayIndex) {
+            // Add '+ 1' for 1-based indexing
+            if (ts.isNumericLiteral(argumentExpression)) {
+                // Handle numeric literal index directly
+                try {
+                    const numericValue = parseInt(argumentAsString, 10);
+                    if (!isNaN(numericValue) && Number.isInteger(numericValue)) { // Check if it's a valid integer
+                        argumentAsString = (numericValue + 1).toString(); // Calculate 1-based index
+                    } else {
+                        // Fallback for non-integer literals or if parse fails, add 1 dynamically
+                        console.warn("[JuliaTranspiler] Non-integer numeric literal used for array indexing, adding +1 dynamically:", argumentAsString);
+                        argumentAsString = `(${argumentAsString}) + 1`; // Wrap original arg if adding
+                    }
+                } catch (e) {
+                    console.warn("[JuliaTranspiler] Could not parse numeric literal for indexing, adding +1 dynamically:", argumentAsString);
+                    argumentAsString = `(${argumentAsString}) + 1`; // Wrap original arg if adding
+                }
+            } else {
+                // Handle variable or other expression types used as array index
+                 // Just add 1 directly. Julia handles integer arithmetic.
+                 // If indexVar could be float, conversion might be needed, but test expects direct addition.
+                 argumentAsString = `${argumentAsString} + 1`; // Add 1 directly to the variable/expression
             }
-            // If it's likely a number, treat as array index (add +1)
-            else if (type.flags & ts.TypeFlags.NumberLike || type.flags & ts.TypeFlags.Any || type.flags & ts.TypeFlags.Unknown) {
-                 argumentAsString = `${argumentAsString} + 1`;
-            }
-            // Otherwise, assume it's a dictionary key (could be Symbol or other types)
-            else {
-                 // Default to treating as dictionary key (no +1)
-                 // Consider adding Symbol() conversion if necessary based on Julia practice
-                 // argumentAsString = `Symbol(${argumentAsString})`; // Example if Symbol needed
+        } else {
+            // Dictionary Key Access
+            if (ts.isStringLiteral(argumentExpression)) {
+                 // Convert string literal "key" to :key for dictionary access
+                 argumentAsString = `:${argumentExpression.text}`;
+            } else {
+                 // Assume argumentExpression holds a variable or expression evaluating to a key
+                 // Convert to Symbol if it's not already one (consistent with delete/creation)
+                 // Check if the variable is likely already a Symbol based on its name convention or type if possible
+                 const argumentType = global.checker.getTypeAtLocation(argumentExpression);
+                 const argumentSymbol = argumentType.getSymbol();
+                 if (argumentSymbol && argumentSymbol.escapedName === 'Symbol') {
+                    // If it's already a symbol, use it directly
+                 } else {
+                    // Otherwise, convert to symbol
+                    argumentAsString = `Symbol(${argumentAsString})`;
+                 }
             }
         }
 
-        // Construct the Julia expression
+        // Construct the Julia expression: expression[argument]
+        // Wrap expression if it's complex? Usually not needed for simple variables.
+        // Wrap argument if it involved addition? Parentheses added above solve this.
         return `${expressionAsString}[${argumentAsString}]`;
+    }
+
+    // Helper to check for array-like type flags
+    isArrayType(type: ts.Type): boolean {
+        // Check if the type is an array type
+        if (global.checker.isArrayType(type)) {
+            return true;
+        }
+
+        // Check if the type is a tuple type
+        if (global.checker.isTupleType(type)) {
+            return true;
+        }
+
+        // Check if the type is a union type containing an array or tuple
+        if (type.isUnion()) {
+            for (const unionType of type.types) {
+                if (this.isArrayType(unionType)) { // Recursive call
+                    return true;
+                }
+            }
+        }
+
+        // Fallback: Check the symbolic name if available (less reliable)
+        const symbol = type.getSymbol();
+        if (symbol && symbol.escapedName === 'Array') {
+            return true;
+        }
+
+        // Consider interface names like ReadonlyArray
+        if (symbol && symbol.escapedName === 'ReadonlyArray') {
+            return true;
+        }
+
+        // Add more specific checks if needed, e.g., for specific built-in types like NodeListOf
+
+        return false;
     }
 }

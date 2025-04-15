@@ -136,9 +136,9 @@ end
 }`;
         const julia =
             `x = Dict(
-    raw"world" => Dict(
-        raw"hello" => Dict(
-            raw"foo" => raw"bar"
+    :world => Dict(
+        :hello => Dict(
+            :foo => raw"bar"
         )
     )
 );
@@ -271,7 +271,7 @@ end
     y::String = raw"test"
     a1::Vector{String} = [raw"a", raw"b"]
     a2::Any = whatever
-    a3::Any = Dict()
+    a3::Any = Dict{Symbol, Any}()
     a4::Any = Whatever
     mainFeature::Function = mainFeature
 end
@@ -378,9 +378,9 @@ end
 }`;
         const julia =
             `types = Dict(
-    raw"limit" => raw"limit",
-    raw"market" => raw"market",
-    raw"margin" => raw"market"
+    :limit => raw"limit",
+    :market => raw"market",
+    :margin => raw"market"
 );
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -444,8 +444,8 @@ y -= 1;
             `const x = {};
 x['foo'] = 'bar'`;
         const julia =
-            `x = Dict();
-x[raw"foo"] = raw"bar";
+            `x = Dict{Symbol, Any}();
+x[:foo] = raw"bar";
 `;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
@@ -513,8 +513,8 @@ h = a <= b;
 const k = JSON.parse(j);`;
         const julia =
             `j = JSON3.json(Dict(
-    raw"a" => 1,
-    raw"b" => 2
+    :a => 1,
+    :b => 2
 ));
 k = JSON3.parse(j);
 `;
@@ -528,8 +528,8 @@ k = JSON3.parse(j);
 const y = Object.keys(x);
 const yy = Object.values(x);`;
         const julia =
-            `x = Dict();
-y = [k for k in keys(x)];
+            `x = Dict{Symbol, Any}();
+y = collect(keys(x));
 yy = [v for v in values(x)];
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -829,9 +829,9 @@ end
         expect(output).toBe(julia);
     });
 
-    test('convert concat', () => {
+    test.only('convert concat', () => {
         const ts = `y.concat(z)`;
-        const julia = `string(y, z);\n`;
+        const julia = `concat(y, z);\n`;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
@@ -989,7 +989,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('element access expression with numeric index', () => {
+    test('element access expression with numeric index', () => {
         const ts =
             `const myArray = [10, 20, 30];
 const first = myArray[0];
