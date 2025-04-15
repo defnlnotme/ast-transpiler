@@ -2979,4 +2979,55 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Fallback for other potential prefix operators
         return `${operator}${operand}`;
     }
+
+    printLengthProperty(node, identation, name = undefined) {
+        const leftSide = this.printNode(node.expression, 0); // Use the expression node directly
+        return `length(${leftSide})`;
+    }
+
+    printElementAccessExpression(node, identation) {
+        const { expression, argumentExpression } = node;
+
+        const exception = this.printElementAccessExpressionExceptionIfAny(node);
+        if (exception) {
+            return exception;
+        }
+
+        const expressionAsString = this.printNode(expression, 0);
+        let argumentAsString = this.printNode(argumentExpression, 0);
+
+        // Check if the argument is a numeric literal. If so, increment it.
+        if (ts.isNumericLiteral(argumentExpression)) {
+            try {
+                const numericValue = parseInt(argumentAsString, 10);
+                if (!isNaN(numericValue)) {
+                    argumentAsString = (numericValue + 1).toString(); // Julia is 1-based index
+                } else {
+                    // Fallback for non-integer literals or if parse fails, add 1 dynamically
+                    argumentAsString = `${argumentAsString} + 1`;
+                }
+            } catch (e) {
+                 // Fallback if parsing fails
+                console.warn("Could not parse numeric literal for indexing, adding +1 dynamically:", argumentAsString);
+                argumentAsString = `${argumentAsString} + 1`;
+            }
+        } else {
+             // If the argument is not a numeric literal (e.g., a variable),
+             // we assume it needs to be converted to Int and incremented at runtime.
+             // Check the type to decide if Int() conversion is necessary
+            const type = global.checker.getTypeAtLocation(argumentExpression);
+            // Check if type is already a number/integer type, or if it's 'any'/'unknown'
+            // (ts.TypeFlags.Number includes Int, NumberLiteral might also be relevant)
+             if (type.flags & ts.TypeFlags.NumberLike || type.flags & ts.TypeFlags.Any || type.flags & ts.TypeFlags.Unknown) {
+                 // If it's likely numeric, just add 1
+                 argumentAsString = `${argumentAsString} + 1`;
+             } else {
+                 // Otherwise, attempt conversion (might still fail at runtime if not convertible)
+                 argumentAsString = `Int(${argumentAsString}) + 1`;
+             }
+        }
+
+        // Construct the Julia expression with 1-based index
+        return `${expressionAsString}[${argumentAsString}]`;
+    }
 }

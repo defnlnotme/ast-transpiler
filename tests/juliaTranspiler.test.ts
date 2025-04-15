@@ -988,4 +988,22 @@ end
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
+
+    test.only('element access expression with numeric index', () => {
+        const ts =
+            `const myArray = [10, 20, 30];
+const first = myArray[0];
+const second = myArray[1];
+const indexVar = 2;
+const third = myArray[indexVar];`;
+        const julia =
+            `myArray = [10, 20, 30];
+first = myArray[1];
+second = myArray[2];
+indexVar = 2;
+third = myArray[indexVar + 1];
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 });
