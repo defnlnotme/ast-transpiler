@@ -2996,8 +2996,9 @@ export class JuliaTranspiler extends BaseTranspiler {
         const expressionAsString = this.printNode(expression, 0);
         let argumentAsString = this.printNode(argumentExpression, 0);
 
-        // Check if the argument is a numeric literal. If so, increment it.
+        // Check if the argument is a numeric literal or a string literal
         if (ts.isNumericLiteral(argumentExpression)) {
+            // Handle numeric literal index for arrays (1-based)
             try {
                 const numericValue = parseInt(argumentAsString, 10);
                 if (!isNaN(numericValue)) {
@@ -3011,23 +3012,31 @@ export class JuliaTranspiler extends BaseTranspiler {
                 console.warn("Could not parse numeric literal for indexing, adding +1 dynamically:", argumentAsString);
                 argumentAsString = `${argumentAsString} + 1`;
             }
+        } else if (ts.isStringLiteral(argumentExpression)) {
+            // Handle string literal index for dictionaries - use the string directly
+             // No need to modify argumentAsString, it's already the printed string literal (e.g., raw"key")
         } else {
-             // If the argument is not a numeric literal (e.g., a variable),
-             // we assume it needs to be converted to Int and incremented at runtime.
-             // Check the type to decide if Int() conversion is necessary
+            // Handle variable or other expression types for indexing
+            // Check the type to determine if it's likely an array index (needs +1) or dict key
             const type = global.checker.getTypeAtLocation(argumentExpression);
-            // Check if type is already a number/integer type, or if it's 'any'/'unknown'
-            // (ts.TypeFlags.Number includes Int, NumberLiteral might also be relevant)
-             if (type.flags & ts.TypeFlags.NumberLike || type.flags & ts.TypeFlags.Any || type.flags & ts.TypeFlags.Unknown) {
-                 // If it's likely numeric, just add 1
+
+            // If it's a known string type, treat as dictionary key
+            if (type.flags & ts.TypeFlags.StringLike) {
+                 // Use the variable/expression directly as the key
+            }
+            // If it's likely a number, treat as array index (add +1)
+            else if (type.flags & ts.TypeFlags.NumberLike || type.flags & ts.TypeFlags.Any || type.flags & ts.TypeFlags.Unknown) {
                  argumentAsString = `${argumentAsString} + 1`;
-             } else {
-                 // Otherwise, attempt conversion (might still fail at runtime if not convertible)
-                 argumentAsString = `Int(${argumentAsString}) + 1`;
-             }
+            }
+            // Otherwise, assume it's a dictionary key (could be Symbol or other types)
+            else {
+                 // Default to treating as dictionary key (no +1)
+                 // Consider adding Symbol() conversion if necessary based on Julia practice
+                 // argumentAsString = `Symbol(${argumentAsString})`; // Example if Symbol needed
+            }
         }
 
-        // Construct the Julia expression with 1-based index
+        // Construct the Julia expression
         return `${expressionAsString}[${argumentAsString}]`;
     }
 }
