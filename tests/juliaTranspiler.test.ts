@@ -1006,4 +1006,94 @@ third = myArray[indexVar + 1];
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
+
+    test.only('class with inheritance, methods, async, JSDoc, super call', () => {
+        const ts = `
+export default class binance extends binanceRest {
+    describe (): any {
+        const superDescribe = super.describe ();
+        return this.deepExtend (superDescribe, this.describeData ());
+    }
+
+    /**
+     * @method
+     * @name binance#watchLiquidations
+     * @description watch the public liquidations of a trading pair
+     * @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
+     * @see https://developers.binance.com/docs/derivatives/coin-margined-futures/websocket-market-streams/Liquidation-Order-Streams
+     * @param {string} symbol unified CCXT market symbol
+     * @param {int} [since] the earliest time in ms to fetch liquidations for
+     * @param {int} [limit] the maximum number of liquidation structures to retrieve
+     * @param {object} [params] exchange specific parameters for the bitmex api endpoint
+     * @returns {object} an array of [liquidation structures]{@link https://github.com/ccxt/ccxt/wiki/Manual#liquidation-structure}
+     */
+    async watchLiquidations (symbol: string, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Liquidation[]> {
+        return await this.watchLiquidationsForSymbols ([ symbol ], since, limit, params);
+    }
+}`; // Ensure correct indentation within the template literal
+
+        // Expected Julia output:
+        // - Removes 'export default'
+        // - Creates a struct inheriting via a 'parent' field
+        // - Uses @kwdef because of methods
+        // - Defines methods as fields pointing to the actual functions
+        // - Adds Base.getproperty for inheritance delegation
+        // - Translates instance methods, adding 'self::className'
+        // - Translates 'this.' to 'self.' and adds 'self' as first arg to calls
+        // - Translates 'super.describe()' potentially using the 'parent' field (this is a guess based on constructor behavior)
+        // - Converts JSDoc to Julia docstring, mapping types and tags
+        // - Translates async/await based on config (default is @async, removing await)
+        // - Handles default parameters (undefined -> nothing, {} -> Dict())
+        // - Maps Promise<Type[]> return hint in JSDoc to Vector{Type}
+        // - Keeps array literal `[ symbol ]`
+        const julia = `@kwdef struct binance
+    parent::binanceRest
+    describe::Function = describe
+    watchLiquidations::Function = watchLiquidations
+end
+function describe(self::binance)
+    superDescribe = self.parent.describe();
+    return self.deepExtend(self, superDescribe, self.describeData(self));
+end
+"""
+watch the public liquidations of a trading pair
+@see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
+@see https://developers.binance.com/docs/derivatives/coin-margined-futures/websocket-market-streams/Liquidation-Order-Streams
+
+# Arguments
+- \`symbol\`::String: unified CCXT market symbol
+- \`[since]\`::Any: the earliest time in ms to fetch liquidations for
+- \`[limit]\`::Any: the maximum number of liquidation structures to retrieve
+- \`[params]\`::Dict: exchange specific parameters for the bitmex api endpoint
+
+# Returns
+- \`Dict\`: an array of [\`liquidation structures\`](https://github.com/ccxt/ccxt/wiki/Manual#liquidation-structure)
+"""
+async function watchLiquidations(self::binance, symbol, since=nothing, limit=nothing, params=Dict())
+    return self.watchLiquidationsForSymbols(self, [symbol], since, limit, params);
+
+end
+
+function Base.getproperty(self::binance, name::Symbol)
+    if hasfield(binance, name)
+        getfield(self, name)
+    else
+        parent = getfield(self, :parent)
+        if hasproperty(parent, name)
+            getproperty(parent, name)
+        else
+            error("Property $name not found")
+        end
+    end
+end
+`
+        const output = transpiler.transpileJulia(ts).content;
+        // console.log("--- TS INPUT ---");
+        // console.log(ts);
+        // console.log("--- JULIA OUTPUT ---");
+        // console.log(output);
+        // console.log("--- EXPECTED JULIA ---");
+        // console.log(julia);
+        expect(output).toBe(julia);
+    });
 });

@@ -62,6 +62,7 @@ const parserConfig = {
     SPREAD_TOKEN: "...",
     NULL_TOKEN: "nothing",
     DEFAULT_IDENTATION: "    ",
+    ASYNC_TOKEN: ""
 };
 
 export class JuliaTranspiler extends BaseTranspiler {
@@ -2135,6 +2136,7 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         return classInit;
     }
+
     printMethodDeclaration(node, identation) {
         let methodDef = this.printMethodDefinition(node, identation);
 
@@ -2532,7 +2534,6 @@ export class JuliaTranspiler extends BaseTranspiler {
                 // Just ensure structure after """ starts correctly.
             }
         }
-
         // Trim internal leading/trailing whitespace within the block more carefully
         const contentLines = transformed.split("\n");
         if (contentLines.length > 2) {
@@ -2617,7 +2618,6 @@ export class JuliaTranspiler extends BaseTranspiler {
             this.tmpJSDoc = result; // Store potential docblock
             result = ""; // Clear result so it's not duplicated
         }
-
         // Add the parsed node content
         result += parsedNode;
 
@@ -3130,5 +3130,32 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Add more specific checks if needed, e.g., for specific built-in types like NodeListOf
 
         return false;
+    }
+
+    printMethodDefinition(node, identation) {
+        let name = node.name.escapedText;
+        name = this.transformMethodNameIfNeeded(name);
+        this.withinFunctionDeclaration = true;
+        this.currentFunctionName = name
+
+        let returnType = this.printFunctionType(node);
+
+        let modifiers = this.printModifiers(node);
+        const defaultAccess = this.METHOD_DEFAULT_ACCESS ? this.METHOD_DEFAULT_ACCESS + " ": "";
+        modifiers = modifiers ? modifiers + " " : defaultAccess; // tmp check this
+
+        const parsedArgs = this.printMethodParameters(node);
+
+        returnType = returnType ? returnType + " " : returnType;
+
+        const methodToken = this.METHOD_TOKEN ? this.METHOD_TOKEN + " " : "";
+        const methodDef = this.getIden(identation) + modifiers + returnType + methodToken + name
+            + "(" + parsedArgs + ")";
+
+        let result = this.printNodeCommentsIfAny(node, identation, methodDef);
+        result = this.tmpJSDoc + result
+        this.withinFunctionDeclaration = false;
+        this.tmpJSDoc = ""
+        return result;
     }
 }
