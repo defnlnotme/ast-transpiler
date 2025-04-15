@@ -964,4 +964,28 @@ end
         expect(output).toBe(julia);
 
     });
+    test('transpile simple class with properties and method', () => {
+        const ts =
+`class Second {
+
+    myClassProperty: string = "classProp";
+    myBoolProp: boolean = false;
+    public stringifyNumber(arg: number) {
+        return arg.toString();
+    }
+}`;
+        const julia =
+`@kwdef struct Second
+    myClassProperty::String = raw"classProp"
+    myBoolProp::Bool = false
+    stringifyNumber::Function = stringifyNumber
+end
+function stringifyNumber(self::Second, arg)
+    return string(arg);
+
+end
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 });

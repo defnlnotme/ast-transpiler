@@ -1812,20 +1812,12 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
 
         node.members.forEach((member) => {
-            if (
-                ts.isPropertyDeclaration(member) &&
-                this.isStaticMember(member)
-            ) {
+            // Process *all* PropertyDeclarations for fields
+            if (ts.isPropertyDeclaration(member)) { // Removed isStaticMember check
                 if (ts.isIdentifier(member.name)) {
                     const propertyName = member.name.text;
                     let type = "";
-                    let initializer = "";
-                    let defaultValue = ""; // Added for default value in struct
-
-                    if (member.initializer) {
-                        defaultValue = ` = ${this.printNode(member.initializer, 0)}`;
-                        initializer = ""; //Initializer is handled as default value now
-                    }
+                    let defaultValue = ""; // Use this for @kwdef
 
                     if (member.type) {
                         const typeName = member.type.getText();
@@ -1848,27 +1840,31 @@ export class JuliaTranspiler extends BaseTranspiler {
                                 type = "::Vector{Float64}";
                                 break;
                             case "any":
-                                type = "::Any"; // Any - No type annotation for unknown types, defaults to Any in Julia
+                                type = "::Any";
                                 break;
                             case "{}":
                                 type = "::Dict";
-                                initializer = " = Dict()";
-                                defaultValue = " = Dict()";
                                 break;
                             case "Whatever": // example
-                                type = "::Any"; // to fix the test, was ::Whatever
+                                type = "::Any";
                                 break;
                             default:
-                                type = ""; // Any - No type annotation for unknown types, defaults to object in Julia
+                                type = ""; // Defaults to Any
                         }
                     }
-                    if (type === "") type = "::Any"; // default to Any if type is not inferred
+                    if (type === "") type = "::Any"; // Default to Any if type is not inferred
+
+                    // Get default value from initializer for @kwdef
+                    if (member.initializer) {
+                        defaultValue = ` = ${this.printNode(member.initializer, 0)}`;
+                    }
 
                     propertiesString += `${this.getIden(identation + 1)}${propertyName}${type}${defaultValue}\n`;
                 }
-            } else if (ts.isMethodDeclaration(member)) {
+            } else if (ts.isMethodDeclaration(member) && !ts.isConstructorDeclaration(member) && !this.isStaticMember(member)) { // Only add method signatures if they are instance methods
                 if (ts.isIdentifier(member.name)) {
                     const methodName = member.name.text;
+                    // Add method as a Function field with a default value pointing to the function itself
                     propertiesString += `${this.getIden(identation + 1)}${methodName}::Function = ${methodName}\n`;
                 }
             }
@@ -1876,7 +1872,7 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         let hasOnlyConstructor = false;
         let constructorExists = false;
-        let staticPropertyExists = false;
+        let propertyOrMethodExists = false; // Check for any property or instance method
         let constructorNode: ConstructorDeclaration | undefined = undefined;
 
         node.members.forEach((member) => {
@@ -1884,15 +1880,15 @@ export class JuliaTranspiler extends BaseTranspiler {
                 constructorExists = true;
                 constructorNode = member;
             }
-            if (
-                ts.isPropertyDeclaration(member) &&
-                this.isStaticMember(member)
-            ) {
-                staticPropertyExists = true;
+            // Check if there are any properties or instance methods defined
+            // *** FIX: Use this.isStaticMember ***
+            if (ts.isPropertyDeclaration(member) || (ts.isMethodDeclaration(member) && !this.isStaticMember(member) && !ts.isConstructorDeclaration(member)) ) {
+                propertyOrMethodExists = true;
             }
         });
 
-        if (constructorExists && !staticPropertyExists) {
+        // Only consider it "has only constructor" if constructor exists AND no properties/methods exist
+        if (constructorExists && !propertyOrMethodExists) {
             hasOnlyConstructor = true;
         }
 
