@@ -829,7 +829,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('convert concat', () => {
+    test('convert concat', () => {
         const ts = `y.concat(z)`;
         const julia = `concat(y, z);\n`;
         const output = transpiler.transpileJulia(ts).content;
