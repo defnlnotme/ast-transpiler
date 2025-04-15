@@ -2076,26 +2076,52 @@ export class JuliaTranspiler extends BaseTranspiler {
         const className = node.name.escapedText;
         const heritageClauses = node.heritageClauses;
         let classInit = "";
-        const classOpening = this.getBlockOpen(identation);
+        const classOpening = this.getBlockOpen(identation); // Should be "\n"
+
+        // Determine if @kwdef is needed based *only* on fields with defaults
+
+        // Check 1: Static properties with initializers directly translate to fields with defaults
         const hasDefaultValues = node.members.some(
             (member) =>
                 ts.isPropertyDeclaration(member) &&
+                this.isStaticMember(member) &&
                 member.initializer !== undefined,
         );
 
-        if (hasDefaultValues) {
-            classInit =
-                this.getIden(identation) +
-                "@kwdef struct " +
-                className +
-                classOpening;
+        // Check 2: Instance methods translate to Function fields with defaults
+        const hasMethods = node.members.some(
+            (member) =>
+                ts.isMethodDeclaration(member) &&
+                !ts.isConstructorDeclaration(member) &&
+                !this.isStaticMember(member),
+        );
+
+        // Use @kwdef ONLY if either of the above conditions is true
+        const useKwdef = hasDefaultValues || hasMethods;
+
+        // Start building the definition string
+        classInit = this.getIden(identation);
+
+        if (useKwdef) {
+            // Use @kwdef, inheritance is handled by the parent field + getproperty
+            classInit += "@kwdef struct " + className;
         } else {
-            classInit =
-                this.getIden(identation) + "struct " + className + classOpening;
+            // Use plain struct - Inheritance is handled by the 'parent' field and getproperty
+            classInit += "struct " + className;
+            // *** REMOVED inheritance syntax from struct definition line ***
+            // if (heritageClauses !== undefined) {
+            //     const classExtends =
+            //         heritageClauses[0].types[0].expression.escapedText;
+            //     const extendsToken = this.EXTENDS_TOKEN || "<:"; // Default to <:
+            //     classInit += " " + extendsToken + " " + classExtends;
+            // }
         }
+
+        // Add the opening block syntax (newline)
+        classInit += classOpening; // "\n"
+
         return classInit;
     }
-
     printMethodDeclaration(node, identation) {
         let methodDef = this.printMethodDefinition(node, identation);
 

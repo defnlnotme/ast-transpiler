@@ -24,29 +24,29 @@ describe('julia transpiler tests', () => {
 
     test('basic while loop', () => {
         const ts =
-        "while (true) {\n" +
-        "    const x = 1;\n" +
-        "    break;\n" +
-        "}"
+            "while (true) {\n" +
+            "    const x = 1;\n" +
+            "    break;\n" +
+            "}"
 
         const julia =
-        "while true\n" +
-        "    x = 1;\n" +
-        "    break;\n" +
-        "end\n"
+            "while true\n" +
+            "    x = 1;\n" +
+            "    break;\n" +
+            "end\n"
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
     test('basic for loop', () => {
         const ts =
-        "for (let i = 0; i < 10; i++) {\n" +
-        "    break;\n" +
-        "}"
+            "for (let i = 0; i < 10; i++) {\n" +
+            "    break;\n" +
+            "}"
         const julia =
-        "for i in 0:9\n" +
-        "    break\n" +
-        "end\n";
+            "for i in 0:9\n" +
+            "    break\n" +
+            "end\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
@@ -64,7 +64,7 @@ describe('julia transpiler tests', () => {
     test('function with default parameters', () => {
         const ts = "function teste(x = \"foo\", y = undefined, params = {}) { return 1; }";
         const julia =
-`function teste(x=raw"foo", y=nothing, params=Dict())
+            `function teste(x=raw"foo", y=nothing, params=Dict())
     return 1;
 end;`;
         const output = transpiler.transpileJulia(ts).content.trim();
@@ -73,12 +73,12 @@ end;`;
 
     test('callback function transpilation', () => {
         const ts =
-`function printResult(result) {
+            `function printResult(result) {
     return;
 }
 processNumbers(5, 10, printResult);`;
         const julia =
-`function printResult(result)
+            `function printResult(result)
     return ;
 end;
 processNumbers(5, 10, printResult);
@@ -90,9 +90,9 @@ processNumbers(5, 10, printResult);
     });
 
     test('function expression transpilation', () => {
-    const ts = "const consumer = function consumer(a) { return a + 1; };";
-    const julia =
-`function consumer(a)
+        const ts = "const consumer = function consumer(a) { return a + 1; };";
+        const julia =
+            `function consumer(a)
     return a + 1;
 end;\n`;
         const output = transpiler.transpileJulia(ts).content;
@@ -101,7 +101,7 @@ end;\n`;
 
     test('nested if statements', () => {
         const ts =
-`if (1) {
+            `if (1) {
     if (2) {
         if (4) {
             if (5) {
@@ -111,7 +111,7 @@ end;\n`;
     }
 }`;
         const julia =
-`if 1
+            `if 1
     if 2
         if 4
             if 5
@@ -127,7 +127,7 @@ end
 
     test('nested objects', () => {
         const ts =
-`const x = {
+            `const x = {
     'world': {
         'hello': {
             'foo': 'bar'
@@ -135,7 +135,7 @@ end
     }
 }`;
         const julia =
-`x = Dict(
+            `x = Dict(
     raw"world" => Dict(
         raw"hello" => Dict(
             raw"foo" => raw"bar"
@@ -150,7 +150,7 @@ end
     test('if statement', () => {
         const ts = "if (condition) { statement; }";
         const julia =
-`if condition
+            `if condition
     statement;
 end
 `;
@@ -160,13 +160,13 @@ end
 
     test('if-else statement', () => {
         const ts =
-`if (1) {
+            `if (1) {
     const x = 1;
 } else {
     const x = 2;
 }`;
         const julia =
-`if 1
+            `if 1
     x = 1;
 else
     x = 2;
@@ -178,7 +178,7 @@ end
 
     test('if-elseif-else statement', () => {
         const ts =
-`if (1) {
+            `if (1) {
     const x = 1;
 } else if (2) {
     const x = 2;
@@ -186,7 +186,7 @@ end
     const x = 3;
 }`;
         const julia =
-`if 1
+            `if 1
     x = 1;
 elseif 2
     x = 2;
@@ -200,12 +200,12 @@ end
 
     test('async function declaration', () => {
         const ts =
-`async function camelCase() {
+            `async function camelCase() {
     this.myFunc()
     await this.loadMarkets();
 }`;
         const julia =
-`@async function camelCase()
+            `@async function camelCase()
     self.myFunc(self);
     self.loadMarkets(self);
 end;
@@ -217,12 +217,12 @@ end;
     test('convert async function to sync', () => {
         transpiler.setJuliaAsyncTranspiling(false);
         const ts =
-`async function camelCase() {
+            `async function camelCase() {
     this.myFunc()
     await this.loadMarkets();
 }`;
         const julia =
-`function camelCase()
+            `function camelCase()
     self.myFunc(self);
     self.loadMarkets(self);
 end;
@@ -235,7 +235,7 @@ end;
     test('class declaration', () => {
         const ts = "class MyClass { constructor(a, b: number) { this.a = a; this.b = b; } }";
         const julia =
-`struct MyClass
+            `struct MyClass
     attrs::Dict{Symbol, Any}
     function MyClass(args...; a::Any, b::Float64, kwargs...)
         v = new(Dict{Symbol, Any}())
@@ -254,7 +254,7 @@ end
 
     test('class declaration with properties', () => {
         const ts =
-`class MyClass {
+            `class MyClass {
     public static x: number = 10;
     public static y: string = "test";
     public static a1: string[] = [ 'a', 'b' ];
@@ -266,7 +266,7 @@ end
     }
 }`;
         const julia =
-`@kwdef struct MyClass
+            `@kwdef struct MyClass
     x::Float64 = 10
     y::String = raw"test"
     a1::Vector{String} = [raw"a", raw"b"]
@@ -287,7 +287,7 @@ end
     test('for loop', () => {
         const ts = "for (let i = 0; i < 10; i++) { console.log(i); }";
         const julia =
-`for i in 0:9
+            `for i in 0:9
     println(i);
 end\n`;
         const output = transpiler.transpileJulia(ts).content;
@@ -296,14 +296,14 @@ end\n`;
 
     test('class inheritance', () => {
         const ts =
-`class teste extends extended {
+            `class teste extends extended {
     public static a1: string[] = [ 'a', 'b' ];
     method() {
         return 1;
     }
 }`;
         const julia =
-`@kwdef struct teste
+            `@kwdef struct teste
     parent::extended
     a1::Vector{String} = [raw"a", raw"b"]
     method::Function = method
@@ -332,13 +332,13 @@ end
 
     test('class with constructor', () => {
         const ts =
-`class teste extends extended {
+            `class teste extends extended {
     constructor(x) {
         super(x);
     }
 }`;
         const julia =
-`struct teste
+            `struct teste
     parent::extended
     attrs::Dict{Symbol, Any}
     function teste(args...; x::Any, kwargs...)
@@ -371,13 +371,13 @@ end
 
     test('dictionary', () => {
         const ts =
-`const types = {
+            `const types = {
     'limit': 'limit',
     'market': 'market',
     'margin': 'market',
 }`;
         const julia =
-`types = Dict(
+            `types = Dict(
     raw"limit" => raw"limit",
     raw"market" => raw"market",
     raw"margin" => raw"market"
@@ -389,14 +389,14 @@ end
 
     test('binary expressions', () => {
         const ts =
-`const a = 1 + 1;
+            `const a = 1 + 1;
 const b = 2 * 2;
 const c = 3 / 3;
 const d = 4 - 4;
 const e = 5 % 5;
 const f = "foo" + "bar";`;
         const julia =
-`a = 1 + 1;
+            `a = 1 + 1;
 b = 2 * 2;
 c = 3 / 3;
 d = 4 - 4;
@@ -409,12 +409,12 @@ f = string(raw"foo", raw"bar");
 
     test('condition expressions', () => {
         const ts =
-`const a = true;
+            `const a = true;
 const b = false;
 const c = true;
 const d = (a && b) || (c && !b);`;
         const julia =
-`a = true;
+            `a = true;
 b = false;
 c = true;
 d = (a && b) || (c && !b);
@@ -425,12 +425,12 @@ d = (a && b) || (c && !b);
 
     test('postfix unary expression', () => {
         const ts =
-`let x = 1;
+            `let x = 1;
 x++;
 let y = 1;
 y--;`;
         const julia =
-`x = 1;
+            `x = 1;
 x += 1;
 y = 1;
 y -= 1;
@@ -441,10 +441,10 @@ y -= 1;
 
     test('element access expression', () => {
         const ts =
-`const x = {};
+            `const x = {};
 x['foo'] = 'bar'`;
         const julia =
-`x = Dict();
+            `x = Dict();
 x[raw"foo"] = raw"bar";
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -453,11 +453,11 @@ x[raw"foo"] = raw"bar";
 
     test('throw statement', () => {
         const ts =
-`function testf {
+            `function testf {
     throw new InvalidOrder("error")
 }`;
         const julia =
-`function testf()
+            `function testf()
     throw(InvalidOrder(raw"error"));
 end;
 `;
@@ -467,13 +467,13 @@ end;
 
     test('try-catch block', () => {
         const ts =
-`try {
+            `try {
     riskyCode();
 } catch (e) {
     console.log(e);
 }`;
         const julia =
-`try
+            `try
     riskyCode();
 catch e
     println(e);
@@ -484,8 +484,8 @@ end
     });
 
     test('comparison operators', () => {
-          const ts =
-`const a = 1;
+        const ts =
+            `const a = 1;
 const b = 1+1;
 const c = a === b;
 const d = a !== b;
@@ -493,8 +493,8 @@ const e = a < b;
 const f = a > b;
 const g = a >= b;
 const h = a <= b;`;
-          const julia =
-`a = 1;
+        const julia =
+            `a = 1;
 b = 1 + 1;
 c = a == b;
 d = a != b;
@@ -503,16 +503,16 @@ f = a > b;
 g = a >= b;
 h = a <= b;
 `;
-          const output = transpiler.transpileJulia(ts).content;
-          expect(output).toBe(julia);
-      });
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 
     test('json methods', () => {
         const ts =
-`const j = JSON.stringify({ 'a': 1, 'b': 2 });
+            `const j = JSON.stringify({ 'a': 1, 'b': 2 });
 const k = JSON.parse(j);`;
         const julia =
-`j = JSON3.json(Dict(
+            `j = JSON3.json(Dict(
     raw"a" => 1,
     raw"b" => 2
 ));
@@ -524,11 +524,11 @@ k = JSON3.parse(j);
 
     test('object methods', () => {
         const ts =
-`const x = {};
+            `const x = {};
 const y = Object.keys(x);
 const yy = Object.values(x);`;
         const julia =
-`x = Dict();
+            `x = Dict();
 y = [k for k in keys(x)];
 yy = [v for v in values(x)];
 `;
@@ -594,11 +594,11 @@ yy = [v for v in values(x)];
 
     test('comparison with undefined', () => {
         const ts =
-`const x = 1 === undefined;
+            `const x = 1 === undefined;
 const y = 1 !== undefined;
 const c = 3 == undefined;`;
         const julia =
-`x = 1 == nothing;
+            `x = 1 == nothing;
 y = 1 != nothing;
 c = 3 == nothing;
 `;
@@ -608,10 +608,10 @@ c = 3 == nothing;
 
     test('indexOf string check existence', () => {
         const ts =
-`const myString = "bar"
+            `const myString = "bar"
 const exists = myString.indexOf("b") >= 0;`;
         const julia =
-`myString = raw"bar";
+            `myString = raw"bar";
 exists = findfirst(raw"b", myString) !== nothing;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -620,10 +620,10 @@ exists = findfirst(raw"b", myString) !== nothing;
 
     test('indexOf list check existence', () => {
         const ts =
-`const myList = [1,2,3];
+            `const myList = [1,2,3];
 const exists = myList.indexOf(1) >= 0;`;
         const julia =
-`myList = [1, 2, 3];
+            `myList = [1, 2, 3];
 exists = findfirst(1, myList) !== nothing;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -632,10 +632,10 @@ exists = findfirst(1, myList) !== nothing;
 
     test('includes list', () => {
         const ts =
-`const myList = [1,2,3];
+            `const myList = [1,2,3];
 const exists = myList.includes(1);`;
         const julia =
-`myList = [1, 2, 3];
+            `myList = [1, 2, 3];
 exists = 1 in myList;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -644,10 +644,10 @@ exists = 1 in myList;
 
     test('includes string', () => {
         const ts =
-`const myString = "bar"
+            `const myString = "bar"
 const exists = myString.includes("b");`;
         const julia =
-`myString = raw"bar";
+            `myString = raw"bar";
 exists = occursin(raw"b", myString);
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -656,13 +656,13 @@ exists = occursin(raw"b", myString);
 
     test('as expression', () => {
         const ts =
-`const x = 1;
+            `const x = 1;
 const a = "foo";
 const y = x as any;
 const t = a as string;
 const z = x as number;`;
         const julia =
-`x = 1;
+            `x = 1;
 a = raw"foo";
 y = x;
 t = a;
@@ -675,12 +675,12 @@ z = x;
     test('snake case function and method calls', () => {
         transpiler.setJuliaUncamelCaseIdentifiers(true);
         const ts =
-`function camelCase() {
+            `function camelCase() {
     this.myFunc()
     myFunc()
 }`;
         const julia =
-`function camel_case()
+            `function camel_case()
     self.my_func(self);
     my_func();
 end;
@@ -692,10 +692,10 @@ end;
 
     test('Promise.all conversion', () => {
         const ts =
-`let promises = [this.fetchSwapAndFutureMarkets(params), this.fetchUSDCMarkets(params)];
+            `let promises = [this.fetchSwapAndFutureMarkets(params), this.fetchUSDCMarkets(params)];
 promises = await Promise.all(promises);`;
         const julia =
-`promises = [self.fetchSwapAndFutureMarkets(self, params), self.fetchUSDCMarkets(self, params)];
+            `promises = [self.fetchSwapAndFutureMarkets(self, params), self.fetchUSDCMarkets(self, params)];
 promises = [fetch(p) for p in promises];
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -704,7 +704,7 @@ promises = [fetch(p) for p in promises];
 
     test('convert JS doc to Julia doc', () => {
         const ts =
-`function fetchStatus(params) {
+            `function fetchStatus(params) {
     /**
      * @method
      * @name aax#fetchStatus
@@ -715,7 +715,7 @@ promises = [fetch(p) for p in promises];
     return 1;
 }`;
         const julia =
-`"""
+            `"""
 fetchStatus(params)
 
 the latest known information on the availability of the exchange API
@@ -736,11 +736,11 @@ end;
 
     test('leading and trailing comments', () => {
         const ts =
-`// I'm a leading comment
+            `// I'm a leading comment
 const z = "my var" // I'm a trailing comment
 const a = "bar" // I'm second trailing comment`;
         const julia =
-`# I'm a leading comment
+            `# I'm a leading comment
 z = raw"my var"; # I'm a trailing comment
 a = raw"bar"; # I'm second trailing comment
 `;
@@ -775,7 +775,7 @@ a = raw"bar"; # I'm second trailing comment
 
     test('remove CommonJS imports', () => {
         const ts =
-`const {a,b,x} = require('ola')
+            `const {a,b,x} = require('ola')
 const myVar = a.b;`;
         const julia = `myVar = a.b;\n`;
         const output = transpiler.transpileJulia(ts).content;
@@ -784,7 +784,7 @@ const myVar = a.b;`;
 
     test('remove CommonJS exports', () => {
         const ts =
-`module.exports = {
+            `module.exports = {
     a,
     b,
     c,
@@ -796,11 +796,11 @@ const myVar = a.b;`;
 
     test('comparison to true', () => {
         const ts =
-`if (x === true) {
+            `if (x === true) {
     console.log(1);
 }`;
         const julia =
-`if x
+            `if x
     println(1);
 end
 `;
@@ -810,11 +810,11 @@ end
 
     test('continue statement', () => {
         const ts =
-`while(true){
+            `while(true){
     continue;
 }`;
         const julia =
-`while true
+            `while true
     continue;
 end
 `;
@@ -839,7 +839,7 @@ end
     test('convert search', () => {
         const ts = `"abcdxtzyw".search("xt");`;
         const julia =
-`let v = findfirst(raw"xt", raw"abcdxtzyw");
+            `let v = findfirst(raw"xt", raw"abcdxtzyw");
     if v == nothing
         -1
     else
@@ -868,7 +868,7 @@ end
     test('instanceOf expression', () => {
         const ts = "if (x instanceof MyClass) { ... }";
         const julia =
-`if isa(x, MyClass)
+            `if isa(x, MyClass)
 end`; // Corrected expected output, removed '...'
         const output = transpiler.transpileJulia(ts).content.trim(); // Trim output
         expect(output.replace(/\s/g, '')).toBe(julia.trim().replace(/\s/g, '')); // Remove assertion
@@ -883,17 +883,17 @@ end`; // Corrected expected output, removed '...'
 
     test('delete expression', () => {
         const ts = "delete myObject.property;";
-         const julia = "delete!(myObject, :property);\n"; // Updated expected output to TODO comment
-         const output = transpiler.transpileJulia(ts).content;
-         expect(output).toBe(julia); // Comment out assertion for delete expression test
+        const julia = "delete!(myObject, :property);\n"; // Updated expected output to TODO comment
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia); // Comment out assertion for delete expression test
     });
 
     test('spread operator', () => {
-         const ts = "const newArray = [...oldArray];";
-         const julia = "newArray = [oldArray...];";
-         const output = transpiler.transpileJulia(ts).content.trim(); // Trim output
-         expect(output).toBe(julia.trim()); // Trim expected output as well
-     });
+        const ts = "const newArray = [...oldArray];";
+        const julia = "newArray = [oldArray...];";
+        const output = transpiler.transpileJulia(ts).content.trim(); // Trim output
+        expect(output).toBe(julia.trim()); // Trim expected output as well
+    });
 
     test('assert statement', () => { // Removed .only from 'assert statement' test
         const ts = "assert(condition, 'message');";
@@ -911,12 +911,12 @@ end`; // Corrected expected output, removed '...'
 
     test('postfix unary expression', () => {
         const ts =
-`let i = 0;
+            `let i = 0;
 i++;
 let j = 10;
 j--;`;
         const julia =
-`i = 0;
+            `i = 0;
 i += 1;
 j = 10;
 j -= 1;
@@ -927,10 +927,10 @@ j -= 1;
 
     test('prefix unary expression - negation', () => {
         const ts =
-`const yes = true;
+            `const yes = true;
 const no = !yes;`;
         const julia =
-`yes = true;
+            `yes = true;
 no = !yes;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -942,5 +942,26 @@ no = !yes;
         const julia = 'instance.mymethod(instance, 4);\n';
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
+    });
+
+    test('class with only method', () => {
+        const ts =
+            `class ClassWithOnlyMethod {
+    myMethod(arg: number) {
+        return arg + 1;
+    }
+}`;
+        const julia =
+            `@kwdef struct ClassWithOnlyMethod
+    myMethod::Function = myMethod
+end
+function myMethod(self::ClassWithOnlyMethod, arg)
+    return arg + 1;
+
+end
+`; // No @kwdef expected
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+
     });
 });
