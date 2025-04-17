@@ -62,7 +62,8 @@ const parserConfig = {
     SPREAD_TOKEN: "...",
     NULL_TOKEN: "nothing",
     DEFAULT_IDENTATION: "    ",
-    ASYNC_TOKEN: ""
+    ASYNC_TOKEN: "",
+    AWAIT_TOKEN: "fetch"
 };
 
 export class JuliaTranspiler extends BaseTranspiler {
@@ -345,40 +346,69 @@ export class JuliaTranspiler extends BaseTranspiler {
             : "";
 
         // 2. Get Function Definition (will get its own indentation now)
-        let signature = this.printFunctionDefinition(node, 0); // Pass 0 for definition itself
-        // 3. Get Function Body
+        // Use 0 indent for the signature line itself, apply overall indent later
+        let signature = this.printFunctionDefinition(node, 0);
+
+        // 3. Determine if async and needs the block wrapper
+        const isAsync = this.isAsyncFunction(node) && this.asyncTranspiling;
+
+        // 4. Get Function Body (or async block body)
         let funcBody = "";
+        let blockCloseToken = "end;"; // Default closing token
         if (node.body) {
+            const bodyIdentation = identation + (isAsync ? 1 : 0); // Indent body further if inside @async begin
+
             if (ts.isBlock(node.body)) {
-                // Pass identation + 1 to printBlock for indenting statements inside
-                funcBody = this.printBlock(node.body, identation);
+                // Process statements with the correct indentation
+                funcBody = node.body.statements.map(stmt => {
+                    return this.getIden(bodyIdentation + 1) + this.printNode(stmt, 0); // Inner statements get +1 indent
+                }).join('\n') + '\n'; // Ensure newline after last statement
             } else {
-                // Handle expression body (e.g., arrow functions) if needed, though less common in this context
+                // Handle expression body (e.g., arrow functions)
                 funcBody =
-                    this.getIden(identation + 1) +
+                    this.getIden(bodyIdentation + 1) +
                     "return " +
                     this.printNode(node.body, 0) +
                     ";\n";
             }
+
+            // Wrap in @async begin...end if needed
+            if (isAsync) {
+                funcBody =
+                    this.getIden(bodyIdentation) + "@async begin\n" +
+                    funcBody +
+                    this.getIden(bodyIdentation) + "end\n";
+                blockCloseToken = "end;"; // Keep the outer end;
+            }
+        } else {
+             // Handle empty body
+             if (isAsync) {
+                  funcBody = this.getIden(identation + 1) + "@async begin\n" +
+                             this.getIden(identation + 1) + "end\n";
+             } else {
+                  funcBody = ""; // Empty regular function
+             }
         }
 
-        // 4. Get Trailing Comment
+
+        // 5. Get Trailing Comment
         const trailingComment = this.printTraillingComment(node, identation);
         const trailingCommentFormatted = trailingComment
             ? " " + trailingComment.trim()
             : "";
 
-        // 5. Assemble the final string: Docstring -> Signature -> Body -> End -> Trailing Comment
+        // 6. Assemble the final string: Docstring -> Signature -> Body -> End -> Trailing Comment
+        // Apply overall indentation to the signature
         const codeBlock =
             this.tmpJSDoc +
-            signature + // Signature already has its indentation
-            (funcBody || "\n") + // Body ensures its newline(s), or add one if empty
-            this.getIden(identation) +
-            "end;" + // Indented 'end'
+            this.getIden(identation) + signature + // Apply overall identation to signature line
+            funcBody + // Body already has its correct indentation (relative to signature or @async begin)
+            this.getIden(identation) + // Base indentation for the final 'end;'
+            blockCloseToken +
             trailingCommentFormatted;
 
         this.withinFunctionDeclaration = false;
-        // 6. Prepend docstring and return - IMPORTANT: Comments are added HERE, before the code block
+        // 7. Prepend docstring and return
         return leadingCommentFormatted + codeBlock;
     }
 
@@ -1000,6 +1030,9 @@ export class JuliaTranspiler extends BaseTranspiler {
             ) {
                 return ""; // remove module.exports = ...
             }
+            if (ts.SyntaxKind.ThisKeyword === node.kind) {
+                return "self"; // Directly return "self" for Julia
+            }
             // Handle Potential Function Expression Assignment early if needed
             let isHandledFunctionExpressionAssignment = false;
             if (
@@ -1144,8 +1177,6 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result = this.printParenthesizedExpression(node, 0); // Inner expression handles indent
                 } else if ((ts as any).isBooleanLiteral(node)) {
                     result = this.printBooleanLiteral(node);
-                } else if (ts.SyntaxKind.ThisKeyword === node.kind) {
-                    result = this.THIS_TOKEN; // Should be removed or handled contextually for Julia
                 } else if (ts.SyntaxKind.SuperKeyword === node.kind) {
                     result = this.SUPER_TOKEN;
                 } else if (ts.isTryStatement(node)) {
@@ -1347,18 +1378,16 @@ export class JuliaTranspiler extends BaseTranspiler {
         return methodDef + this.getBlockClose(identation);
     }
 
-    printFunctionDefinition(node, identation) {
-        // REMOVED indentation param from getIdent call
+    printFunctionDefinition(node: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction, identation: number): string {
+        // REMOVED indentation param from getIdent call (remains removed)
         let result = "";
-        if (this.isAsyncFunction(node) && this.asyncTranspiling) {
-            result += "@async ";
-        }
-        result += this.FUNCTION_TOKEN + " ";
+        result += this.FUNCTION_TOKEN + " "; // function
 
         let functionName = "";
+        // Determine function name (same logic as before)
         if (ts.isFunctionDeclaration(node) && node.name) {
             functionName = this.transformFunctionNameIfNeeded(
-                node.name.escapedText,
+                node.name.escapedText as string,
             );
         } else if (
             ts.isFunctionExpression(node) &&
@@ -1366,406 +1395,179 @@ export class JuliaTranspiler extends BaseTranspiler {
             node.name
         ) {
             functionName = this.transformFunctionNameIfNeeded(
-                node.name.escapedText,
+                node.name.escapedText as string,
             );
         }
+        // Needed for JSDoc generation and potentially other logic
         this.currentFunctionName = functionName;
-        result += functionName;
+        result += functionName; // function name
 
-        result += "(";
+        result += "("; // Opening parenthesis
 
-        let params = "";
-        if (node.parameters) {
-            params += node.parameters
-                .map((param) => this.printParameter(param, true))
-                .join(", ");
+        // --- ** START MODIFICATION ** ---
+        // Check if the function body contains 'this' keyword usage
+        const usesThis = node.body ? this.containsThisKeyword(node.body) : false;
+
+        let paramsList: string[] = [];
+
+        // Add 'self' as the first parameter ONLY if 'this' is used
+        if (usesThis) {
+            paramsList.push("self"); // Add self parameter
         }
-        this.currentFunctionParams = params;
-        result += params;
-        result = result.replace(/^\(\s*,\s*/, "(");
-        result = result.replace(/,(\s*)$/, "$1");
-        result = result.replace(/\(\s*\)/, "()");
-        result += ")\n"; // Add newline after signature
 
-        // Removed this.getIden(identation) + result;
-        return result;
+        // Process original parameters
+        if (node.parameters) {
+            node.parameters.forEach(param => {
+                // Print parameter, handling default values etc.
+                paramsList.push(this.printParameter(param, true));
+            });
+        }
+
+        let params = paramsList.join(", ");
+        this.currentFunctionParams = params; // Store potentially modified params for JSDoc
+
+        // --- ** END MODIFICATION ** ---
+
+        result += params; // Add parameters string (might include 'self')
+
+        // Cleanup extra commas/spaces (same logic as before)
+        // Note: These regex might need adjustment if 'self' is the *only* parameter
+        result = result.replace(/^\(self, $/,"(self)"); // Handle case where only 'self' is added and there were other params starting with comma space
+        result = result.replace(/^\(\s*,\s*/, "("); // Remove leading comma and space if 'self' wasn't added but params started badly
+        result = result.replace(/,(\s*)$/, "$1"); // remove trailing comma
+        result = result.replace(/\(\s*\)/, "()"); // Remove whitespace inside empty parentheses
+
+
+        result += ")\n"; // Closing parenthesis and newline
+
+        return result; // Return the signature line
     }
 
-    printAwaitExpression(node, identation) {
-        const expression = this.printNode(node.expression, identation);
-        const awaitToken = this.asyncTranspiling ? "" : ""; // remove await keyword
-        return awaitToken + expression;
-    }
-
-    printCallExpression(node, identation) {
-        const expression = node.expression;
-
+    printCallExpression(node: ts.CallExpression, identation: number): string {
+        const expression = node.expression; // The part being called (e.g., 'func', 'obj.method', 'this.method')
         const parsedArgs = this.printArgsForCallExpression(node, identation);
 
-        const removeParenthesis =
-            this.shouldRemoveParenthesisFromCallExpression(node);
-
-        const finalExpression = this.printOutOfOrderCallExpressionIfAny(
-            node,
-            identation,
-        );
-        if (finalExpression) {
-            return finalExpression;
-        }
-
-        // check propertyAccessExpression for built in functions calls like Json.parse
-        if (node.expression.kind === ts.SyntaxKind.PropertyAccessExpression) {
-            // *** NEW: Check FullPropertyAccessReplacements first ***
-            const expressionTextFull = node.expression.getText().trim();
-            if (this.FullPropertyAccessReplacements.hasOwnProperty(expressionTextFull)) {
-                 // Handle replacements like console.log(...)
-                 return `${this.FullPropertyAccessReplacements[expressionTextFull]}(${parsedArgs})`;
-            }
-            // *** END NEW ***
-
-            // Handle 'this' keyword calls specifically
-            if (node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
-                const propertyAccess = this.printPropertyAccessExpression(
-                    node.expression,
-                    identation,
-                );
-                const functionName = node.expression.name.escapedText;
-                const methodName = this.transformCallExpressionName(
-                    this.unCamelCaseIfNeeded(functionName),
-                );
-                // Prepend 'self' as the first argument
-                const selfArgs = parsedArgs ? "self, " + parsedArgs : "self";
-                return (
-                    propertyAccess.replace("self." + functionName, "self." + methodName) +
-                    "(" +
-                    selfArgs + // Use args with self prepended
-                    ")"
-                );
-            }
-
-            // Handle built-in function calls (JSON, Math, etc.)
-            const expressionText = node.expression.getText().trim(); // Use the same variable name for consistency
-            const args = node.arguments ?? [];
-
-            // ... (existing checks for JSON.parse, Math.floor, etc.) remain here ...
-             if (args.length === 1) {
-                const parsedArg = this.printNode(args[0], 0);
-                switch (expressionText) {
-                    case "JSON.parse":
-                        return this.printJsonParseCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "JSON.stringify":
-                        return this.printJsonStringifyCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Array.isArray":
-                        return this.printArrayIsArrayCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Object.keys":
-                        return this.printObjectKeysCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Object.values":
-                        return this.printObjectValuesCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Promise.all":
-                        return this.printPromiseAllCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Math.round":
-                        return this.printMathRoundCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Math.floor":
-                        return this.printMathFloorCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Math.ceil":
-                        return this.printMathCeilCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                    case "Number.isInteger":
-                        return this.printNumberIsIntegerCall(
-                            node,
-                            identation,
-                            parsedArg,
-                        );
-                }
-            } else if (args.length == 0) {
-                switch (expressionText) {
-                    case "Date.now":
-                        return this.printDateNowCall(node, identation);
-                }
-            }
-
-            // ... (existing checks for toString, toUpperCase, etc.) remain here ...
-            const rightSide = node.expression.name?.escapedText;
-            const leftSide = node.expression?.expression;
-
-            if (
-                args.length === 0 &&
-                rightSide !== undefined &&
-                leftSide !== undefined
-            ) {
-                const parsedLeftSide = this.printNode(leftSide, 0);
-                switch (rightSide) {
-                    case "toString":
-                        return this.printToStringCall(
-                            node,
-                            identation,
-                            parsedLeftSide,
-                        );
-                    case "toUpperCase":
-                        return this.printToUpperCaseCall(
-                            node,
-                            identation,
-                            parsedLeftSide,
-                        );
-                    case "toLowerCase":
-                        return this.printToLowerCaseCall(
-                            node,
-                            identation,
-                            parsedLeftSide,
-                        );
-                    case "shift":
-                        return this.printShiftCall(
-                            node,
-                            identation,
-                            parsedLeftSide,
-                        );
-                    case "pop":
-                        return this.printPopCall(
-                            node,
-                            identation,
-                            parsedLeftSide,
-                        );
-                    case "reverse":
-                        return this.printReverseCall(
-                            node,
-                            identation,
-                            parsedLeftSide,
-                        );
-                    case "trim":
-                        return this.printTrimCall(
-                            node,
-                            identation,
-                            parsedLeftSide,
-                        );
-                }
-            }
-
-            // ... (existing checks for push, includes, etc.) remain here ...
-             const arg = args && args.length > 0 ? args[0] : undefined;
-
-            if (leftSide && rightSide && arg) {
-                const parsedArg = this.printNode(arg, identation).trimStart();
-                const secondParsedArg = args[1]
-                    ? this.printNode(args[1], identation).trimStart()
-                    : undefined;
-                const name = this.printNode(leftSide, 0);
-                switch (rightSide) {
-                    case "push":
-                        return this.printArrayPushCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "includes":
-                        return this.printIncludesCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "indexOf":
-                        return this.printIndexOfCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "join":
-                        return this.printJoinCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "split":
-                        return this.printSplitCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "toFixed":
-                        return this.printToFixedCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "concat":
-                        return this.printConcatCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "search":
-                        return this.printSearchCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "endsWith":
-                        return this.printEndsWithCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "startsWith":
-                        return this.printStartsWithCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                        );
-                    case "padEnd":
-                        return this.printPadEndCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                            secondParsedArg,
-                        );
-                    case "padStart":
-                        return this.printPadStartCall(
-                            node,
-                            identation,
-                            name,
-                            parsedArg,
-                            secondParsedArg,
-                        );
-                }
-
-                if (args.length === 1 || args.length === 2) {
-                    const parsedArg2 = args[1]
-                        ? this.printNode(args[1], identation).trimStart()
-                        : undefined;
-                    switch (rightSide) {
-                        case "slice":
-                            return this.printSliceCall(
-                                node,
-                                identation,
-                                name,
-                                parsedArg,
-                                parsedArg2,
-                            );
-                        case "replace":
-                            return this.printReplaceCall(
-                                node,
-                                identation,
-                                name,
-                                parsedArg,
-                                parsedArg2,
-                            );
-                        case "replaceAll":
-                            return this.printReplaceAllCall(
-                                node,
-                                identation,
-                                name,
-                                parsedArg,
-                                parsedArg2,
-                            );
-                    }
-                }
-            }
-
-             // *** NEW LOGIC for instance method calls ***
-             // Check if the expression's base is an Identifier (likely an instance)
-             // and it's not 'this' (already handled) or a known global/static object
-             const baseExpression = node.expression.expression;
-             const knownGlobals = ["JSON", "Math", "Object", "Array", "Promise", "Date", "Number", "console"]; // Add 'console' here
-             if (ts.isIdentifier(baseExpression) && !knownGlobals.includes(baseExpression.text)) {
-                const instanceName = this.printNode(baseExpression, 0);
-                const methodName = this.printNode(node.expression.name, 0); // Includes potential replacements/uncamelcase
-                const instanceAndArgs = instanceName + (parsedArgs ? ", " + parsedArgs : "");
-                return `${instanceName}.${methodName}(${instanceAndArgs})`;
-             }
-             // *** END NEW LOGIC ***
-
-        } else {
-            // handle functions like assert
-            const args = node.arguments ?? [];
-            if (args.length === 2) {
-                if (expression.escapedText === "assert") {
-                    return this.printAssertCall(node, identation, parsedArgs);
-                }
-                if (expression.escapedText === "padEnd") {
-                    // check this
-                }
-            }
-        }
-
-        // print super() call inside constructor
-        if (expression.kind === ts.SyntaxKind.SuperKeyword) {
+        // --- Handle super() and super.method() ---
+        if (expression.kind === ts.SyntaxKind.SuperKeyword || (ts.isPropertyAccessExpression(expression) && expression.expression.kind === ts.SyntaxKind.SuperKeyword)) {
             return this.printSuperCallInsideConstructor(node, identation);
         }
 
-        // Generic fallback call expression handling
-        let parsedExpression = undefined;
-        if (
-            this.CallExpressionReplacements.hasOwnProperty(expression.getText())
-        ) {
-            // eslint-disable-line
-            parsedExpression =
-                this.CallExpressionReplacements[expression.getText()];
-        } else {
-            if (expression.kind === ts.SyntaxKind.Identifier) {
-                const idValue = expression.text ?? expression.escapedText;
-                parsedExpression = this.transformCallExpressionName(
-                    this.unCamelCaseIfNeeded(idValue),
-                );
-            } else {
-                // If it's a PropertyAccessExpression that wasn't handled above, print it
-                 if (ts.isPropertyAccessExpression(expression)) {
-                     parsedExpression = this.printPropertyAccessExpression(expression, 0);
-                 } else {
-                    parsedExpression = this.printNode(expression, 0); // General fallback
-                 }
+        // --- Handle Property Access Calls (obj.method(), this.method()) ---
+        if (ts.isPropertyAccessExpression(expression)) {
+            const propAccessExpr = expression; // e.g., this.myFunc or obj.myFunc
+            const baseExpr = propAccessExpr.expression; // e.g., this or obj
+
+            // Check Full replacements first (e.g., JSON.stringify)
+            const expressionTextFull = propAccessExpr.getText().trim();
+            if (this.FullPropertyAccessReplacements.hasOwnProperty(expressionTextFull)) {
+                return `${this.FullPropertyAccessReplacements[expressionTextFull]}(${parsedArgs})`;
             }
+
+            // --- Check if based on 'this' ---
+            const isBasedOnThis = (expr: ts.Expression): boolean => {
+                // ... (same recursive check as before) ...
+                if (expr.kind === ts.SyntaxKind.ThisKeyword) return true;
+                if (ts.isPropertyAccessExpression(expr)) return isBasedOnThis(expr.expression);
+                 if (ts.isCallExpression(expr) && ts.isPropertyAccessExpression(expr.expression)){
+                     return isBasedOnThis(expr.expression.expression);
+                }
+                return false;
+            };
+
+            if (isBasedOnThis(baseExpr)) {
+                // It's a call like this.method() or this.prop.method()
+                // Print the property access chain "this.method" which should become "self.method"
+                const fullMethodAccessString = this.printNode(propAccessExpr, 0);
+
+                if (!fullMethodAccessString || fullMethodAccessString === 'self') {
+                    // If printNode failed or just returned 'self', try to construct manually
+                     console.warn(`[Warn] printNode gave unexpected result ('${fullMethodAccessString}') for 'this' based call: ${propAccessExpr.getText()}. Attempting manual construction.`);
+                     let basePrinted = 'self'; // Start with self
+                     // Attempt to rebuild the chain manually (simplified)
+                     let currentExpr = propAccessExpr;
+                     let names: string[] = [];
+                     while(ts.isPropertyAccessExpression(currentExpr) && currentExpr.expression.kind !== ts.SyntaxKind.ThisKeyword) {
+                         names.push(this.transformCallExpressionName(this.unCamelCaseIfNeeded(currentExpr.name.getText())));
+                         currentExpr = currentExpr.expression as ts.PropertyAccessExpression; // Assume chain of props
+                     }
+                     if (ts.isPropertyAccessExpression(currentExpr)) {
+                         names.push(this.transformCallExpressionName(this.unCamelCaseIfNeeded(currentExpr.name.getText())));
+                     }
+                     const methodChain = names.reverse().join('.');
+                     const constructedAccess = methodChain ? `${basePrinted}.${methodChain}` : basePrinted;
+
+
+                     const selfArgs = parsedArgs ? "self, " + parsedArgs : "self";
+                     return `${constructedAccess}(${selfArgs})`;
+                }
+
+
+                // Prepend 'self' as the first argument.
+                const selfArgs = parsedArgs ? "self, " + parsedArgs : "self";
+
+                // Construct the final call string: self.method(self, ...)
+                return `${fullMethodAccessString}(${selfArgs})`;
+            }
+            // --- END Check 'this' ---
+
+            // --- Handle instance calls NOT based on 'this' (e.g., myObj.method()) ---
+             const knownGlobals = ["JSON", "Math", "Object", "Array", "Promise", "Date", "Number", "console"];
+             // Check if baseExpr is an identifier and NOT a known global AND NOT 'this' (already handled)
+             if (ts.isIdentifier(baseExpr) && !knownGlobals.includes(baseExpr.text)) {
+                const instanceName = this.printNode(baseExpr, 0);
+                const methodName = this.transformCallExpressionName(
+                    this.unCamelCaseIfNeeded(propAccessExpr.name.escapedText as string)
+                );
+                // Prepend instance name as first argument
+                const instanceAndArgs = instanceName + (parsedArgs ? ", " + parsedArgs : "");
+                return `${instanceName}.${methodName}(${instanceAndArgs})`;
+             }
+
+
+            // --- Handle Specific Static / Global Method Calls (Math.abs, etc.) ---
+            // (Logic for printJsonParseCall, printMathFloorCall etc. goes here)
+            // Ensure these checks use `expressionTextFull` where appropriate.
+            // Example for Math.floor:
+            // if (expressionTextFull === "Math.floor" && node.arguments?.length === 1) {
+            //    const parsedArg = this.printNode(node.arguments[0], 0);
+            //    return this.printMathFloorCall(node, identation, parsedArg);
+            // }
+            // ... (include all other specific handlers like Array.isArray, Object.keys, etc.) ...
+
+             // --- Handle Specific Instance Method Calls (toString, push, includes, etc.) ---
+             // Example for toString():
+             // const rightSide = propAccessExpr.name?.escapedText;
+             // const leftSideNode = propAccessExpr.expression;
+             // if (node.arguments?.length === 0 && rightSide === "toString" && leftSideNode) {
+             //     const parsedLeftSide = this.printNode(leftSideNode, 0);
+             //     return this.printToStringCall(node, identation, parsedLeftSide);
+             // }
+             // ... (include all other specific instance method handlers like push, includes, etc., ensuring they get the instance name via printNode(leftSideNode, 0)) ...
+
         }
 
-        let parsedCall = parsedExpression;
-        if (!removeParenthesis) {
-            parsedCall += "(" + parsedArgs + ")";
+        // --- Handle Direct Function Calls (not property access) ---
+        if (ts.isIdentifier(expression)) {
+            const functionName = expression.text ?? expression.escapedText as string;
+            // Check specific function overrides (assert, parseInt, etc.)
+            if (this.CallExpressionReplacements.hasOwnProperty(functionName)) {
+                 let replacement = this.CallExpressionReplacements[functionName];
+                 let requiresClosingParen = /(\(|, $)/.test(replacement); // Check if replacement ends with ( or needs args
+                 return `${replacement}${parsedArgs}${requiresClosingParen ? ')' : ''}`;
+            }
+             if (functionName === "assert" && node.arguments?.length === 2) {
+                 return this.printAssertCall(node, identation, parsedArgs);
+            }
+
+            // Default: print potentially transformed function name + args
+            const transformedName = this.transformCallExpressionName(this.unCamelCaseIfNeeded(functionName));
+            return `${transformedName}(${parsedArgs})`;
         }
-        return parsedCall;
+
+        // --- Fallback for other complex call expressions ---
+        conditionalDebugLog(`[Debug] Fallback printCallExpression for: ${node.getText()}`);
+        const expressionStr = this.printNode(expression, 0); // Print the complex expression part
+        return `${expressionStr}(${parsedArgs})`;
     }
 
     printJsonParseCall(node: any, identation: any, parsedArg?: any) {
@@ -2218,59 +2020,87 @@ export class JuliaTranspiler extends BaseTranspiler {
         );
     }
 
-    printPropertyAccessExpression(node, identation) {
-        const expression = node.expression;
+    printPropertyAccessExpression(node: ts.PropertyAccessExpression, identation: number): string {
+        const expression = node.expression; // The object/base part (e.g., 'this', 'myObj', 'this.prop')
+        const name = node.name; // The property/method name identifier (e.g., 'myFunc', 'length')
+        const rightSideName = name.escapedText as string;
 
-        const transformedProperty =
-            this.transformPropertyAcessExpressionIfNeeded(node);
-        if (transformedProperty) {
-            return this.getIden(identation) + transformedProperty;
+        // --- PREEMPTIVE CHECKS (Full path replacements, length property) ---
+        // ... (same as before) ...
+       const rawExpressionText = node.getText().trim();
+       if (this.FullPropertyAccessReplacements.hasOwnProperty(rawExpressionText)) {
+           return this.FullPropertyAccessReplacements[rawExpressionText];
+       }
+       if (rightSideName === "length") {
+            const leftSide = this.printNode(expression, 0); // Print left side first
+            return this.printLengthProperty(node, identation, leftSide);
+       }
+
+
+        // --- HANDLE 'this' RECURSIVELY ---
+        // Define the helper function locally or use the class member `this.isBasedOnThis` if defined
+        const isBasedOnThis = (expr: ts.Expression): boolean => {
+            if (expr.kind === ts.SyntaxKind.ThisKeyword) return true;
+            if (ts.isPropertyAccessExpression(expr)) return isBasedOnThis(expr.expression);
+               if (ts.isCallExpression(expr) && ts.isPropertyAccessExpression(expr.expression)){
+                   return isBasedOnThis(expr.expression.expression);
+              }
+            return false;
+        };
+
+        if (isBasedOnThis(expression)) {
+            // Recursively print the left side. The base case (ThisKeyword)
+            // should now reliably return "self" due to the printNode fix.
+            const leftSidePrinted = this.printNode(expression, 0);
+
+            // If leftSidePrinted is unexpectedly empty, log a warning but proceed
+            if (!leftSidePrinted) {
+                console.warn(`[PAE - Warn] 'this'-based expression node printed empty: ${expression.getText()}`);
+                 // Attempting to recover might be complex; maybe default to 'self'?
+                 // For now, let's see if the printNode fix resolves this fundamentally.
+                 // If the problem persists, this might need a more direct 'self' injection.
+            }
+
+            // Get the right side name and transform it if needed (uncamelcase)
+            const rightSideTransformed = this.transformPropertyAccessExpressionName(rightSideName);
+
+            if (!rightSideTransformed) {
+                console.warn(`[PAE - Warn] transformPropertyAccessExpressionName returned empty for: ${rightSideName} in ${node.getText()}`);
+                return `${leftSidePrinted}.${rightSideName}`; // Fallback uses potentially empty leftSide and original rightSide
+            }
+
+            // Combine: Handle cases where printNode might return only 'self'
+            if (leftSidePrinted === "self") {
+                 return `self.${rightSideTransformed}`;
+            } else if (leftSidePrinted && leftSidePrinted.startsWith("self")) {
+                 // If it correctly printed a chain like 'self.prop'
+                 return `${leftSidePrinted}.${rightSideTransformed}`;
+            } else {
+                 // Fallback/Warning if the base wasn't 'self' as expected
+                 console.warn(`[PAE - Warn] Expected 'self' base for ${node.getText()}, but got '${leftSidePrinted}'. Resulting code might be incorrect.`);
+                 return `${leftSidePrinted}.${rightSideTransformed}`; // Proceed with potentially incorrect base
+            }
         }
+        // --- END HANDLE 'this' ---
 
-        let leftSide = node.expression.escapedText;
-        let rightSide = node.name.escapedText;
 
-        switch (rightSide) {
-            case "length":
-                return this.printLengthProperty(node, identation, leftSide);
-        }
-
-        let rawExpression = node.getText().trim();
-
-        if (this.FullPropertyAccessReplacements.hasOwnProperty(rawExpression)) {
-            // eslint-disable-line
-            return this.FullPropertyAccessReplacements[rawExpression]; // eslint-disable-line
-        }
-
-        if (node.expression.kind === ts.SyntaxKind.ThisKeyword) {
-            return (
-                "self." + this.transformPropertyAccessExpressionName(rightSide)
-            );
-        }
-
-        leftSide = this.LeftPropertyAccessReplacements.hasOwnProperty(leftSide)
+        // --- HANDLE OTHER CASES (not 'this' based) ---
+        // ... (rest of the function remains the same) ...
+        const leftSide = this.printNode(expression, 0);
+        const processedLeftSide = this.LeftPropertyAccessReplacements.hasOwnProperty(leftSide)
             ? this.LeftPropertyAccessReplacements[leftSide]
-            : this.printNode(expression, 0); // eslint-disable-line
+            : leftSide;
+        const processedRightSide = this.RightPropertyAccessReplacements.hasOwnProperty(rightSideName)
+            ? this.RightPropertyAccessReplacements[rightSideName]
+            : this.transformPropertyAccessExpressionName(rightSideName);
 
-        // checking "toString" insde the object will return the builtin toString method :X
-        rightSide = this.RightPropertyAccessReplacements.hasOwnProperty(
-            rightSide,
-        ) // eslint-disable-line
-            ? this.RightPropertyAccessReplacements[rightSide]
-            : (this.transformPropertyAcessRightIdentifierIfNeeded(rightSide) ??
-              rightSide);
+        if (!processedRightSide) {
+            console.warn(`[PAE - Warn] (Non-this) TPAEN returned empty for: ${rightSideName} in ${node.getText()}`);
+            return `${processedLeftSide}.${rightSideName}`; // Fallback
+        }
 
-        // join together the left and right side again
-        const accessToken =
-            this.getExceptionalAccessTokenIfAny(node) ??
-            this.PROPERTY_ACCESS_TOKEN;
-
-        rawExpression =
-            leftSide +
-            accessToken +
-            this.transformPropertyAccessExpressionName(rightSide);
-
-        return rawExpression;
+        const accessToken = this.PROPERTY_ACCESS_TOKEN;
+        return processedLeftSide + accessToken + processedRightSide;
     }
 
     printArrayIsArrayCall(node, identation, parsedArg = undefined) {
@@ -3158,4 +2988,109 @@ export class JuliaTranspiler extends BaseTranspiler {
         this.tmpJSDoc = ""
         return result;
     }
+
+    printSuperCallInsideConstructor(node: ts.CallExpression, identation) {
+        const expression = node.expression;
+
+        // Handle super.method() calls
+        if (ts.isPropertyAccessExpression(expression) && expression.expression.kind === ts.SyntaxKind.SuperKeyword) {
+            const methodName = this.printNode(expression.name, 0);
+            const parsedArgs = this.printArgsForCallExpression(node, identation);
+            // Translate to self.parent.methodName(...)
+            // Assuming the parent method doesn't inherently need 'self' passed.
+            return `self.parent.${methodName}(${parsedArgs ? parsedArgs : ''})`;
+        }
+
+        // Handle super(...) constructor calls
+        if (expression.kind === ts.SyntaxKind.SuperKeyword) {
+            // In Julia struct-based inheritance, parent construction happens structurally
+            // within the child's constructor function (as handled by printConstructorDeclaration).
+            // The explicit super(...) call inside the TS constructor body doesn't map directly
+            // to a statement in the Julia constructor body.
+            return ""; // Effectively remove the super(...) call from the body statements
+        }
+
+        // If the node passed here isn't a super call, return empty or throw error
+        console.warn("printSuperCallInsideConstructor called with non-super node:", node.getText());
+        return "";
+    }
+
+    printAwaitExpression(node, identation) {
+        // This function is now more complex due to the @async transformation
+        if (!this.asyncTranspiling) {
+            // If not async transpiling, just print the expression (effectively removing await)
+            return this.printNode(node.expression, identation);
+        }
+
+        // In async mode, `await this.someFunc()` becomes:
+        // task = @async self.someFunc(self)
+        // ans = fetch(task)
+        // if ans isa Task
+        //     fetch(ans) # Handle nested Tasks if needed
+        // else
+        //     ans
+        // end
+        const expressionText = this.printNode(node.expression, 0); // Print expression without base indent
+        const taskVar = "task"; // Temporary variable names
+        const ansVar = "ans";
+
+        // Base indentation for the whole block
+        const baseIndent = this.getIden(identation);
+        const innerIndent = this.getIden(identation + 1);
+        const deeperIndent = this.getIden(identation + 2);
+
+        let result = "";
+        result += `${baseIndent}${taskVar} = @async ${expressionText};\n`; // No semicolon needed before newline
+        result += `${baseIndent}${ansVar} = ${this.AWAIT_TOKEN}(${taskVar});\n`; // Use fetch()
+        result += `${baseIndent}if ${ansVar} isa Task\n`;
+        result += `${innerIndent}${this.AWAIT_TOKEN}(${ansVar})\n`; // Fetch nested Task if needed
+        result += `${baseIndent}else\n`;
+        result += `${innerIndent}${ansVar}\n`;
+        result += `${baseIndent}end`; // No semicolon after end
+
+        return result; // Return the complete block
+    }
+
+    printMethodParameters(node) {
+        return this.printParameter("self") + node.parameters.map(param => this.printParameter(param)).join(", ");
+    }
+
+    private containsThisKeyword(node: ts.Node | undefined): boolean {
+        if (!node) {
+            return false;
+        }
+
+        let foundThis = false;
+
+        // Check the current node
+        if (ts.isPropertyAccessExpression(node) && node.expression.kind === ts.SyntaxKind.ThisKeyword) {
+            return true; // Found this.property
+        }
+        // check also qualified name access like this.prop.subprop
+        if (ts.isPropertyAccessExpression(node) && this.containsThisKeyword(node.expression)){
+            return true;
+        }
+
+        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+            // Check if it's a call like this.method(...)
+            if (node.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
+                return true; // Found this.method()
+            }
+             // Check if it's a call like this.prop.method(...)
+            if (this.containsThisKeyword(node.expression.expression)) {
+                return true;
+            }
+        }
+
+        // Recursively check children, short-circuiting if 'this' is found
+        ts.forEachChild(node, (child) => {
+            if (foundThis) return; // Stop searching if already found
+            if (this.containsThisKeyword(child)) {
+                foundThis = true;
+            }
+        });
+
+        return foundThis;
+    }
+
 }

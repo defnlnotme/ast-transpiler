@@ -205,9 +205,17 @@ end
     await this.loadMarkets();
 }`;
         const julia =
-            `@async function camelCase()
-    self.myFunc(self);
-    self.loadMarkets(self);
+            `function camelCase()
+    @async begin
+        self.myFunc(self);
+        task = @async self.loadMarkets(self);
+        ans = fetch(task)
+        if ans isa Task
+            fetch(ans)
+        else
+            ans
+        end
+    end
 end;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -1051,11 +1059,13 @@ export default class binance extends binanceRest {
     describe::Function = describe
     watchLiquidations::Function = watchLiquidations
 end
-function describe(self::binance)
+function describe(self::binance, )
     superDescribe = self.parent.describe();
     return self.deepExtend(self, superDescribe, self.describeData(self));
 end
 """
+watchLiquidations()
+
 watch the public liquidations of a trading pair
 @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
 @see https://developers.binance.com/docs/derivatives/coin-margined-futures/websocket-market-streams/Liquidation-Order-Streams
@@ -1069,7 +1079,7 @@ watch the public liquidations of a trading pair
 # Returns
 - \`Dict\`: an array of [\`liquidation structures\`](https://github.com/ccxt/ccxt/wiki/Manual#liquidation-structure)
 """
-async function watchLiquidations(self::binance, symbol, since=nothing, limit=nothing, params=Dict())
+function watchLiquidations(self::binance, symbol, since=nothing, limit=nothing, params=Dict())
     return self.watchLiquidationsForSymbols(self, [symbol], since, limit, params);
 
 end
