@@ -205,15 +205,16 @@ end
     await this.loadMarkets();
 }`;
         const julia =
-            `function camelCase()
+            `function camelCase(self)
     @async begin
         self.myFunc(self);
-        task = @async self.loadMarkets(self);
-        ans = fetch(task)
-        if ans isa Task
-            fetch(ans)
-        else
-            ans
+        let task = @async self.loadMarkets(self);
+            ans = fetch(task)
+            if ans isa Task
+                fetch(ans)
+            else
+                ans
+            end
         end
     end
 end;
@@ -1015,7 +1016,7 @@ third = myArray[indexVar + 1];
         expect(output).toBe(julia);
     });
 
-    test.only('class with inheritance, methods, async, JSDoc, super call', () => {
+    test('class with inheritance, methods, async, JSDoc, super call', () => {
         const ts = `
 export default class binance extends binanceRest {
     describe (): any {
@@ -1060,11 +1061,12 @@ export default class binance extends binanceRest {
     watchLiquidations::Function = watchLiquidations
 end
 function describe(self::binance, )
-    superDescribe = self.parent.describe();
-    return self.deepExtend(self, superDescribe, self.describeData(self));
+superDescribe = self.parent.describe();
+return self.deepExtend(self, superDescribe, self.describeData(self));
+
 end
 """
-watchLiquidations()
+watchLiquidations(params)
 
 watch the public liquidations of a trading pair
 @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
@@ -1080,7 +1082,14 @@ watch the public liquidations of a trading pair
 - \`Dict\`: an array of [\`liquidation structures\`](https://github.com/ccxt/ccxt/wiki/Manual#liquidation-structure)
 """
 function watchLiquidations(self::binance, symbol, since=nothing, limit=nothing, params=Dict())
-    return self.watchLiquidationsForSymbols(self, [symbol], since, limit, params);
+return     let task = @async self.watchLiquidationsForSymbols(self, [symbol], since, limit, params)
+            ans = fetch(task)
+            if ans isa Task
+                fetch(ans)
+            else
+                ans
+            end
+        end;
 
 end
 

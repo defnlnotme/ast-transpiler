@@ -413,6 +413,9 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printParameter(node, defaultValue = true) {
+        if (!node.name) {
+            return "";
+        }
         const name = this.printNode(node.name, 0);
         const initializer = node.initializer;
 
@@ -453,7 +456,7 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printReturnStatement(node, identation) {
-        let result = this.getIden(identation) + "return ";
+        let result = this.getIden(identation + 1) + "return ";
         if (node.expression) {
             result += this.printNode(node.expression, 0);
         }
@@ -477,7 +480,9 @@ export class JuliaTranspiler extends BaseTranspiler {
                         this.DEFAULT_IDENTATION.repeat(identation) +
                         s.trimLeft();
                 }
-                result += s;
+                if (s.trim().length > 0) {
+                    result += s.trimLeft();
+                }
             });
         }
         return result;
@@ -2036,7 +2041,6 @@ export class JuliaTranspiler extends BaseTranspiler {
             return this.printLengthProperty(node, identation, leftSide);
        }
 
-
         // --- HANDLE 'this' RECURSIVELY ---
         // Define the helper function locally or use the class member `this.isBasedOnThis` if defined
         const isBasedOnThis = (expr: ts.Expression): boolean => {
@@ -2082,7 +2086,6 @@ export class JuliaTranspiler extends BaseTranspiler {
             }
         }
         // --- END HANDLE 'this' ---
-
 
         // --- HANDLE OTHER CASES (not 'this' based) ---
         // ... (rest of the function remains the same) ...
@@ -3015,7 +3018,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         return "";
     }
 
-    printAwaitExpression(node, identation) {
+    printAwaitExpression(node: ts.AwaitExpression, identation: number): string {
         // This function is now more complex due to the @async transformation
         if (!this.asyncTranspiling) {
             // If not async transpiling, just print the expression (effectively removing await)
@@ -3030,25 +3033,35 @@ export class JuliaTranspiler extends BaseTranspiler {
         // else
         //     ans
         // end
+        // wrap into let block
+        // let task = @async self.loadMarkets(self);
+        //    ans = fetch(task)
+        //    if ans isa Task
+        //        fetch(ans) # Handle nested Tasks if needed
+        //    else
+        //        ans
+        //    end
+        // end
         const expressionText = this.printNode(node.expression, 0); // Print expression without base indent
         const taskVar = "task"; // Temporary variable names
         const ansVar = "ans";
 
         // Base indentation for the whole block
-        const baseIndent = this.getIden(identation);
-        const innerIndent = this.getIden(identation + 1);
-        const deeperIndent = this.getIden(identation + 2);
+        const baseIdentation = this.getIden(identation + 2);
+        const innerIdentation = this.getIden(identation + 3);
+        const letIdentation = this.getIden(identation + 1)
 
-        let result = "";
-        result += `${baseIndent}${taskVar} = @async ${expressionText};\n`; // No semicolon needed before newline
-        result += `${baseIndent}${ansVar} = ${this.AWAIT_TOKEN}(${taskVar});\n`; // Use fetch()
-        result += `${baseIndent}if ${ansVar} isa Task\n`;
-        result += `${innerIndent}${this.AWAIT_TOKEN}(${ansVar})\n`; // Fetch nested Task if needed
-        result += `${baseIndent}else\n`;
-        result += `${innerIndent}${ansVar}\n`;
-        result += `${baseIndent}end`; // No semicolon after end
+        let result = `${letIdentation}let ${taskVar} = @async ${expressionText}\n`; // Start of let block
 
-        return result; // Return the complete block
+        result += `${innerIdentation}${ansVar} = fetch(${taskVar})\n`; // Use fetch()
+        result += `${innerIdentation}if ${ansVar} isa Task\n`;
+        result += `${this.getIden(identation + 4)}fetch(${ansVar})\n`; // Fetch nested Task if needed
+        result += `${innerIdentation}else\n`;
+        result += `${this.getIden(identation + 4)}${ansVar}\n`;
+        result += `${innerIdentation}end\n`;
+        result += `${baseIdentation}end`; // End of let block
+
+        return result;
     }
 
     printMethodParameters(node) {
