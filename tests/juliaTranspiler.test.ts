@@ -74,7 +74,7 @@ end;`;
     test('callback function transpilation', () => {
         const ts =
             `function printResult(result) {
-    return;
+    return ;
 }
 processNumbers(5, 10, printResult);`;
         const julia =
@@ -200,22 +200,22 @@ end
 
     test('async function declaration', () => {
         const ts =
-            `async function camelCase() {
+`async function camelCase() {
     this.myFunc()
     await this.loadMarkets();
 }`;
         const julia =
-            `function camelCase(self)
+`function camelCase(self)
     @async begin
         self.myFunc(self);
-        let task = @async self.loadMarkets(self);
-            ans = fetch(task)
-            if ans isa Task
-                fetch(ans)
-            else
-                ans
-            end
+        let task = @async self.loadMarkets(self)
+        ans = fetch(task)
+        if ans isa Task
+            fetch(ans)
+        else
+            ans
         end
+    end;
     end
 end;
 `;
