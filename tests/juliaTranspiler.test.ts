@@ -1061,7 +1061,7 @@ export default class binance extends binanceRest {
     watchLiquidations::Function = watchLiquidations
 end
 function describe(self::binance, )
-superDescribe = self.parent.describe();
+    superDescribe = self.parent.describe(self);
 return self.deepExtend(self, superDescribe, self.describeData(self));
 
 end
