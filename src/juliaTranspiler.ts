@@ -1357,10 +1357,18 @@ export class JuliaTranspiler extends BaseTranspiler {
     printFunctionDefinition(node, identation) {
         // REMOVED indentation param from getIdent call
         let result = "";
-        if (this.isAsyncFunction(node) && this.asyncTranspiling) {
-            result += "@async ";
-        }
+
+        // Get modifiers string from base, then potentially remove 'async' if asyncTranspiling is true
+        let modifiers = super.printModifiers(node);
+         if (this.asyncTranspiling && modifiers.includes(this.ASYNC_TOKEN)) {
+             // Remove the async token from the string
+             modifiers = modifiers.replace(this.ASYNC_TOKEN, "").trim();
+         }
+         modifiers = modifiers ? modifiers + " ": ""; // Add space after modifiers if any
+
+        result += modifiers;
         result += this.FUNCTION_TOKEN + " ";
+
 
         let functionName = "";
         if (ts.isFunctionDeclaration(node) && node.name) {
@@ -1376,7 +1384,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 node.name.escapedText,
             );
         }
-        this.currentFunctionName = functionName;
+        this.currentFunctionName = functionName; // Store for JSDoc
         result += functionName;
 
         result += "(";
@@ -1387,7 +1395,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 .map((param) => this.printParameter(param, true))
                 .join(", ");
         }
-        this.currentFunctionParams = params;
+        this.currentFunctionParams = params; // Store for JSDoc
         result += params;
         result = result.replace(/^\(\s*,\s*/, "(");
         result = result.replace(/,(\s*)$/, "$1");
@@ -1395,13 +1403,44 @@ export class JuliaTranspiler extends BaseTranspiler {
         result += ")\n"; // Add newline after signature
 
         // Removed this.getIden(identation) + result;
+        // Comments will now be handled by printFunctionDeclaration wrapper logic
+        // We store JSDoc in tmpJSDoc and handle regular comments later.
         return result;
     }
 
     printAwaitExpression(node, identation) {
-        const expression = this.printNode(node.expression, identation);
-        const awaitToken = this.asyncTranspiling ? "" : ""; // remove await keyword
-        return awaitToken + expression;
+        const expression = node.expression;
+        const parsedExpression = this.printNode(expression, 0); // Parse the expression being awaited
+
+        // Julia async transpiling: Convert `await expression` into a `let` block that:
+        // 1. Starts an `@async` task with the expression.
+        // 2. Fetches the result.
+        // 3. Checks if the result itself is a Task (nested async).
+        // 4. Fetches again if it's a nested Task, otherwise uses the result.
+        // The entire let block returns the final value.
+
+        if (this.asyncTranspiling) {
+             // Generate the Julia let block structure
+             const tempVar = "ans"; // Use 'ans' as the temporary variable name
+
+             let result = this.getIden(identation) + `let task = @async ${parsedExpression}\n`;
+             result += this.getIden(identation + 2) + `${tempVar} = fetch(task)\n`;
+             result += this.getIden(identation + 2) + `if ${tempVar} isa Task\n`;
+             result += this.getIden(identation + 3) + `fetch(${tempVar})\n`; // Fetch the nested task
+             result += this.getIden(identation + 2) + `else\n`;
+             result += this.getIden(identation + 3) + `${tempVar}\n`; // Directly return the value
+             result += this.getIden(identation + 2) + `end\n`;
+             result += this.getIden(identation + 1) + `end`;
+
+             // Note: The calling printNode function (e.g., printReturnStatement) will wrap this
+             // in printNodeCommentsIfAny and add the final LINE_TERMINATOR if required.
+             return result;
+
+        } else {
+             // If async transpiling is off, just output the expression itself.
+             // The 'awaitToken' is already removed by printModifiers when asyncTranspiling is false.
+            return parsedExpression;
+        }
     }
 
     printCallExpression(node: ts.CallExpression, identation: number): string {
@@ -2996,7 +3035,12 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         let returnType = this.printFunctionType(node);
 
-        let modifiers = this.printModifiers(node);
+        // Get modifiers string from base, then potentially remove 'async' if asyncTranspiling is true
+        let modifiers = super.printModifiers(node);
+        if (this.asyncTranspiling && modifiers.includes(this.ASYNC_TOKEN)) {
+             // Remove the async token from the modifiers string
+             modifiers = modifiers.replace(this.ASYNC_TOKEN, "").trim();
+        }
         const defaultAccess = this.METHOD_DEFAULT_ACCESS ? this.METHOD_DEFAULT_ACCESS + " ": "";
         modifiers = modifiers ? modifiers + " " : defaultAccess; // tmp check this
 

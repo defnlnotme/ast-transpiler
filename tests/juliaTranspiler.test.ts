@@ -1016,7 +1016,7 @@ third = myArray[indexVar + 1];
         expect(output).toBe(julia);
     });
 
-    test.only('class with inheritance, methods, async, JSDoc, super call', () => {
+    test('class with inheritance, methods, async, JSDoc, super call', () => {
         const ts = `
 export default class binance extends binanceRest {
     describe (): any {
@@ -1062,12 +1062,10 @@ export default class binance extends binanceRest {
 end
 function describe(self::binance, )
     superDescribe = self.parent.describe(self);
-    
-return self.deepExtend(self, superDescribe, self.describeData(self));
-
+    return self.deepExtend(self, superDescribe, self.describeData(self));
 end
 """
-watchLiquidations(params)
+watchLiquidations()
 
 watch the public liquidations of a trading pair
 @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
@@ -1083,15 +1081,14 @@ watch the public liquidations of a trading pair
 - \`Dict\`: an array of [\`liquidation structures\`](https://github.com/ccxt/ccxt/wiki/Manual#liquidation-structure)
 """
 function watchLiquidations(self::binance, symbol, since=nothing, limit=nothing, params=Dict())
-return     let task = @async self.watchLiquidationsForSymbols(self, [symbol], since, limit, params)
-            ans = fetch(task)
-            if ans isa Task
-                fetch(ans)
-            else
-                ans
-            end
-        end;
-
+    return let task = @async self.watchLiquidationsForSymbols(self, [symbol], since, limit, params)
+        ans = fetch(task)
+        if ans isa Task
+            fetch(ans)
+        else
+            ans
+        end
+    end;
 end
 
 function Base.getproperty(self::binance, name::Symbol)
