@@ -160,6 +160,43 @@ export class JuliaTranspiler extends BaseTranspiler {
         this.tmpJSDoc = "";
         this.currentFunctionName = undefined;
         this.currentFunctionParams = undefined;
+
+        this.ReservedKeywordsReplacements = {
+            // List of Julia reserved keywords
+            'abstract': 'abstract_var',
+            'baremodule': 'baremodule_var',
+            'begin': 'begin_var',
+            'break': 'break_var',
+            'catch': 'catch_var',
+            'const': 'const_var',
+            'continue': 'continue_var',
+            'do': 'do_var',
+            'else': 'else_var',
+            'elseif': 'elseif_var',
+            'end': 'end_var',
+            'export': 'export_var',
+            'false': 'false_var',
+            'finally': 'finally_var',
+            'for': 'for_var',
+            'function': 'function_var',
+            'global': 'global_var',
+            'if': 'if_var',
+            'import': 'import_var',
+            'let': 'let_var',
+            'local': 'local_var',
+            'macro': 'macro_var',
+            'module': 'module_var',
+            'mutable': 'mutable_var',
+            'primitive': 'primitive_var',
+            'quote': 'quote_var',
+            'return': 'return_var',
+            'struct': 'struct_var',
+            'true': 'true_var',
+            'try': 'try_var',
+            'type': 'type_var',
+            'using': 'using_var',
+            'while': 'while_var',
+        };
     }
 
 
@@ -249,6 +286,9 @@ export class JuliaTranspiler extends BaseTranspiler {
                  // Need to handle assignment to patterns carefully here if needed
                  varName = this.printNode(nameNode, 0); // Fallback
              }
+            if (varName in this.ReservedKeywordsReplacements) {
+                varName += "_var"
+            }
             return this.printFunctionExpressionAsDeclaration(initializer, varName);
         }
 
@@ -261,7 +301,10 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // Handle simple Identifier
         if (ts.isIdentifier(nameNode)) {
-            const varName = nameNode.escapedText as string;
+            let varName = nameNode.escapedText as string;
+            if (varName in this.ReservedKeywordsReplacements) {
+                varName += "_var"
+            }
             if (initializer) {
                 // If the initializer was a function expression, it should have been caught above
                  const printedInitializer = this.printNode(initializer, 0);
@@ -3064,5 +3107,29 @@ export class JuliaTranspiler extends BaseTranspiler {
       const regex = /^[ \t\r\n]+/;
 
       return text.replace(regex, '');
+    }
+
+    protected transformIdentifierForReservedKeywords(idValue: string) {
+        if (this.ReservedKeywordsReplacements[idValue]) {
+            return this.ReservedKeywordsReplacements[idValue];
+        }
+        return idValue;
+    }
+
+    protected transformIdentifierAndUnCamelCaseIfNeeded(idValue: string) {
+        let result = this.transformIdentifierForReservedKeywords(idValue);
+        return this.unCamelCaseIfNeeded(result);
+    }
+
+    transformMethodNameIfNeeded(name: string): string {
+        return this.transformIdentifierAndUnCamelCaseIfNeeded(name)
+    }
+
+    transformFunctionNameIfNeeded(name: any): string {
+        return this.transformIdentifierAndUnCamelCaseIfNeeded(name)
+    }
+
+    transformCallExpressionName(name: string): string {
+        return this.transformIdentifierForReservedKeywords(name);
     }
 }

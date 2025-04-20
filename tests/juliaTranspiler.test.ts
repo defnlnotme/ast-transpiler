@@ -1125,4 +1125,10 @@ end
         // console.log(julia);
         expect(output).toBe(julia);
     });
+    test('reserved keyword as variable name', () => {
+        const ts = "const abstract = 1;";
+        const julia = "abstract_var = 1;\n";
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 });
