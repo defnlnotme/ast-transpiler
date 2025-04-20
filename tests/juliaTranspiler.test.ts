@@ -136,9 +136,9 @@ end
 }`;
         const julia =
             `x = Dict(
-    :world => Dict(
-        :hello => Dict(
-            :foo => raw"bar"
+    Symbol("world") => Dict(
+        Symbol("hello") => Dict(
+            Symbol("foo") => raw"bar"
         )
     )
 );
@@ -383,9 +383,9 @@ end
 }`;
         const julia =
             `types = Dict(
-    :limit => raw"limit",
-    :market => raw"market",
-    :margin => raw"market"
+    Symbol("limit") => raw"limit",
+    Symbol("market") => raw"market",
+    Symbol("margin") => raw"market"
 );
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -450,7 +450,7 @@ y -= 1;
 x['foo'] = 'bar'`;
         const julia =
             `x = Dict{Symbol, Any}();
-x[:foo] = raw"bar";
+x[Symbol("foo")] = raw"bar";
 `;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
@@ -518,8 +518,8 @@ h = a <= b;
 const k = JSON.parse(j);`;
         const julia =
             `j = JSON3.json(Dict(
-    :a => 1,
-    :b => 2
+    Symbol("a") => 1,
+    Symbol("b") => 2
 ));
 k = JSON3.parse(j);
 `;

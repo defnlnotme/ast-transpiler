@@ -1274,10 +1274,10 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // Determine the key format: :key for identifiers/string literals, Symbol("...") for complex/variables
         if (ts.isIdentifier(name)) {
-            nameKey = `:${name.text}`; // Preferred: :identifier
+            nameKey = `Symbol("${name.text}")`; // Preferred: :identifier
         } else if (ts.isStringLiteral(name)) {
             // Remove outer quotes from the literal's text content for the symbol
-            nameKey = `:${name.text}`; // Preferred: :stringliteral
+            nameKey = `Symbol("${name.text}")`; // Preferred: :stringliteral
         } else {
             // Fallback for computed property names or other complex cases
             const nameAsString = this.printNode(name, 0);
@@ -2969,7 +2969,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             // Dictionary Key Access
             if (ts.isStringLiteral(argumentExpression)) {
                  // Convert string literal "key" to :key for dictionary access
-                 argumentAsString = `:${argumentExpression.text}`;
+                 argumentAsString = `Symbol("${argumentExpression.text}")`;
             } else {
                  // Assume argumentExpression holds a variable or expression evaluating to a key
                  // Convert to Symbol if it's not already one (consistent with delete/creation)
