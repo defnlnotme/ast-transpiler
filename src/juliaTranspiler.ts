@@ -1654,7 +1654,7 @@ export class JuliaTranspiler extends BaseTranspiler {
              if (this.CallExpressionReplacements.hasOwnProperty(functionName as string)) { // Cast for hasOwnProperty index
                  let replacement = this.CallExpressionReplacements[functionName as string]; // Cast for index access
                   // Handle replacements that include opening parenthesis, adding args and closing paren
-                 if (replacement.endsWith('(')) {
+                 if (replacement.endsWith('(') || replacement.endsWith(', ')) {
                      return `${replacement}${parsedArgs})`;
                  } else {
                     // Standard function call syntax

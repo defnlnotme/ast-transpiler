@@ -1131,4 +1131,18 @@ end
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
+
+    test.only('parseInt and parseFloat with variables', () => {
+        const ts = `const str = '123';
+const intVal = parseInt(str);
+const floatStr = '123.45';
+const floatVal = parseFloat(floatStr);`;
+        const julia = `str = raw"123";
+intVal = parse(Int, str);
+floatStr = raw"123.45";
+floatVal = parse(Float64, floatStr);
+`;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 });
