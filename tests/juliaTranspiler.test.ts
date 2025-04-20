@@ -205,17 +205,15 @@ end
     await this.loadMarkets();
 }`;
         const julia =
-`function camelCase(self)
-    @async begin
-        self.myFunc(self);
-        let task = @async self.loadMarkets(self)
+`function camelCase()
+    self.myFunc(self);
+    let task = @async self.loadMarkets(self)
         ans = fetch(task)
         if ans isa Task
             fetch(ans)
         else
             ans
         end
-    end;
     end
 end;
 `;
@@ -286,7 +284,6 @@ end
 end
 function mainFeature(self::MyClass, message)
     println(string(raw"Hello! I'm inside main class:", message));
-
 end
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -319,7 +316,6 @@ end\n`;
 end
 function method(self::teste, )
     return 1;
-
 end
 
 function Base.getproperty(self::teste, name::Symbol)
@@ -701,11 +697,18 @@ end;
 
     test('Promise.all conversion', () => {
         const ts =
-            `let promises = [this.fetchSwapAndFutureMarkets(params), this.fetchUSDCMarkets(params)];
+`let promises = [this.fetchSwapAndFutureMarkets(params), this.fetchUSDCMarkets(params)];
 promises = await Promise.all(promises);`;
         const julia =
-            `promises = [self.fetchSwapAndFutureMarkets(self, params), self.fetchUSDCMarkets(self, params)];
-promises = [fetch(p) for p in promises];
+`promises = [self.fetchSwapAndFutureMarkets(self, params), self.fetchUSDCMarkets(self, params)];
+promises = let task = @async [fetch(p) for p in promises]
+        ans = fetch(task)
+        if ans isa Task
+            fetch(ans)
+        else
+            ans
+        end
+    end
 `;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
@@ -964,9 +967,19 @@ no = !yes;
             `@kwdef struct ClassWithOnlyMethod
     myMethod::Function = myMethod
 end
+"""
+fetchStatus(params)
+
+the latest known information on the availability of the exchange API
+
+# Arguments
+- \`params\`::Dict: extra parameters specific to the aax api endpoint
+
+# Returns
+- \`Dict\`: a [\`status structure\`](https://docs.ccxt.com/en/latest/manual.html#exchange-status-structure)
+"""
 function myMethod(self::ClassWithOnlyMethod, arg)
     return arg + 1;
-
 end
 `; // No @kwdef expected
         const output = transpiler.transpileJulia(ts).content;
@@ -991,7 +1004,6 @@ end
 end
 function stringifyNumber(self::Second, arg)
     return string(arg);
-
 end
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -1065,7 +1077,7 @@ function describe(self::binance, )
     return self.deepExtend(self, superDescribe, self.describeData(self));
 end
 """
-watchLiquidations()
+watchLiquidations(params)
 
 watch the public liquidations of a trading pair
 @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
