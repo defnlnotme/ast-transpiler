@@ -446,10 +446,13 @@ export class JuliaTranspiler extends BaseTranspiler {
                         this.DEFAULT_IDENTATION.repeat(identation) +
                         s.trimLeft();
                 }
-                result += s;
+                s = this.removeLeadingEmptyLines(s)
+                if (s.length > 0) {
+                    result += this.getIden(identation) + s;
+                }
             });
         }
-        return result;
+        return result.trimRight();
     }
 
     printForStatement(node: ts.ForStatement, identation = 0): string {
@@ -1325,6 +1328,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         identation: number,
         className: string,
     ): string {
+        this.withinFunctionDeclaration = true;
         let methodDef = this.printMethodDefinition(node, identation);
 
         methodDef = methodDef.replace("function ", `${this.METHOD_TOKEN} `);
@@ -1343,7 +1347,11 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         methodDef += funcBody;
 
-        return methodDef + this.getBlockClose(identation);
+        this.withinFunctionDeclaration = false;
+        let result = this.tmpJSDoc + methodDef + this.getBlockClose(identation);
+        this.tmpJSDoc = "";
+        this.currentFunctionName = "";
+        return result;
     }
 
     printFunctionDefinition(node, identation) {
@@ -1980,13 +1988,18 @@ export class JuliaTranspiler extends BaseTranspiler {
         return classInit;
     }
     printMethodDeclaration(node, identation) {
+        this.withinFunctionDeclaration = true;
         let methodDef = this.printMethodDefinition(node, identation);
 
         const funcBody = this.printFunctionBody(node, identation);
 
         methodDef += funcBody;
 
-        return methodDef;
+        this.withinFunctionDeclaration = false;
+        let result = this.tmpJSDoc + methodDef;
+        this.tmpJSDoc = "";
+        this.currentFunctionName = "";
+        return result;
     }
 
     tsToJuliaType(tsType: string): string {
@@ -2974,5 +2987,38 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Add more specific checks if needed, e.g., for specific built-in types like NodeListOf
 
         return false;
+    }
+
+    printMethodDefinition(node, identation) {
+        let name = node.name.escapedText;
+        name = this.transformMethodNameIfNeeded(name);
+        this.currentFunctionName = name;
+
+        let returnType = this.printFunctionType(node);
+
+        let modifiers = this.printModifiers(node);
+        const defaultAccess = this.METHOD_DEFAULT_ACCESS ? this.METHOD_DEFAULT_ACCESS + " ": "";
+        modifiers = modifiers ? modifiers + " " : defaultAccess; // tmp check this
+
+        const parsedArgs = this.printMethodParameters(node);
+
+        returnType = returnType ? returnType + " " : returnType;
+
+        const methodToken = this.METHOD_TOKEN ? this.METHOD_TOKEN + " " : "";
+        const methodDef = this.getIden(identation) + modifiers + returnType + methodToken + name
+            + "(" + parsedArgs + ")";
+
+        return this.printNodeCommentsIfAny(node, identation, methodDef);
+    }
+
+    removeLeadingEmptyLines(text: string): string {
+      // This regex matches one or more occurrences of:
+      // ^           - Matches the beginning of the string.
+      // [ \t\r\n]   - Matches a space, tab, carriage return, or newline character.
+      // +           - Matches the character class one or more times.
+      // Replace the matched pattern with an empty string.
+      const regex = /^[ \t\r\n]+/;
+
+      return text.replace(regex, '');
     }
 }

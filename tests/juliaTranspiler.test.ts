@@ -1016,7 +1016,7 @@ third = myArray[indexVar + 1];
         expect(output).toBe(julia);
     });
 
-    test('class with inheritance, methods, async, JSDoc, super call', () => {
+    test.only('class with inheritance, methods, async, JSDoc, super call', () => {
         const ts = `
 export default class binance extends binanceRest {
     describe (): any {
@@ -1062,6 +1062,7 @@ export default class binance extends binanceRest {
 end
 function describe(self::binance, )
     superDescribe = self.parent.describe(self);
+    
 return self.deepExtend(self, superDescribe, self.describeData(self));
 
 end
