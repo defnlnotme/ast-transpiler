@@ -915,16 +915,14 @@ export class JuliaTranspiler extends BaseTranspiler {
                             )
                         ) {
                             result +=
-                                this.getIden(identation + 1) + // Use identation + 1 for content
                                 this.printNode(
                                     stmt.declarationList.declarations[0].name,
-                                    0,
+                                    identation + 1,
                                 ) +
                                 " = Dict();\n";
                         } else {
                             result +=
-                                this.getIden(identation + 1) +
-                                this.printNode(stmt, 0) +
+                                this.printNode(stmt, identation + 1) +
                                 "\n";
                         }
                     }
@@ -938,8 +936,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             } else {
                 // Single statement - use identation + 1 for content
                 result +=
-                    this.getIden(identation + 1) +
-                    this.printNode(node.thenStatement, 0) +
+                    this.printNode(node.thenStatement, identation + 1) +
                     "\n";
             }
         }
@@ -1575,7 +1572,6 @@ export class JuliaTranspiler extends BaseTranspiler {
              const memberName = memberNameNode.text;
              const parsedBase = this.printNode(baseExpression, 0); // The expression before the dot
              const args = node.arguments ?? []; // arguments as array
-
              // Handle specific member calls like push, includes, indexOf, string methods, etc.
              // These need the *instance* (parsedBase) as the first argument in the Julia function call.
              // The Julia call syntax is `functionName(instance, args...)`.
