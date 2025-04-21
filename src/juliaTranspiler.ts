@@ -6,7 +6,8 @@ import ts, {
     MethodDeclaration,
 } from "typescript";
 import { TranspilationError } from "./types.js"; // Import TranspilationError
-import { red } from "colorette";
+import { red, reset } from "colorette";
+import { Sign } from "crypto";
 
 // --- Conditional Debug Logging ---
 // Helper function to log messages only if the JULIA_TRANSPILER_DEBUG environment variable is set.
@@ -83,6 +84,8 @@ export class JuliaTranspiler extends BaseTranspiler {
     protected withinFunctionDeclaration: boolean;
     protected currentFunctionName: string | undefined;
     protected currentFunctionParams: string | undefined;
+    protected transpiledComments: Set<string>;
+    protected doComments: boolean;
 
     constructor(config = {}) {
         config["parser"] = Object.assign(
@@ -160,6 +163,8 @@ export class JuliaTranspiler extends BaseTranspiler {
         this.tmpJSDoc = "";
         this.currentFunctionName = undefined;
         this.currentFunctionParams = undefined;
+        this.transpiledComments = new Set<string>();
+        this.doComments = false;
 
         this.ReservedKeywordsReplacements = {
             // List of Julia reserved keywords
@@ -378,17 +383,10 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printFunctionDeclaration(node, identation) {
-        this.withinFunctionDeclaration = true;
-        // 1. Get Leading Comments (Docstring) FIRST
-        const leadingComment = this.printLeadingComments(node, identation);
-        // Ensure newline after docstring if it exists
-        const leadingCommentFormatted = leadingComment
-            ? leadingComment.trimEnd() + "\n"
-            : "";
 
-        // 2. Get Function Definition (will get its own indentation now)
+        this.withinFunctionDeclaration = true;
         let signature = this.printFunctionDefinition(node, 0); // Pass 0 for definition itself
-        // 3. Get Function Body
+
         let funcBody = "";
         if (node.body) {
             if (ts.isBlock(node.body)) {
@@ -412,7 +410,6 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // 5. Assemble the final string: Docstring -> Signature -> Body -> End -> Trailing Comment
         const codeBlock =
-            this.tmpJSDoc +
             signature + // Signature already has its indentation
             (funcBody || "\n") + // Body ensures its newline(s), or add one if empty
             this.getIden(identation) +
@@ -421,7 +418,7 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         this.withinFunctionDeclaration = false;
         // 6. Prepend docstring and return - IMPORTANT: Comments are added HERE, before the code block
-        return leadingCommentFormatted + codeBlock;
+        return codeBlock;
     }
 
     printParameter(node, defaultValue = true) {
@@ -465,7 +462,7 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printReturnStatement(node, identation) {
-        let result = this.getIden(identation) + "return ";
+        let result = this.getIden(identation + 1) + "return ";
         if (node.expression) {
             result += this.printNode(node.expression, 0);
         }
@@ -1045,6 +1042,14 @@ export class JuliaTranspiler extends BaseTranspiler {
             ) {
                 return ""; // remove module.exports = ...
             }
+
+            let leadingComment = "";
+            if (!this.withinFunctionDeclaration) {
+                leadingComment = this.printLeadingComments(node, identation).trimLeft();
+            }
+            if (this.transpiledComments.has(this.tmpJSDoc)) {
+                this.tmpJSDoc = ""
+            }
             // Handle Potential Function Expression Assignment early if needed
             let isHandledFunctionExpressionAssignment = false;
             if (
@@ -1127,7 +1132,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                             "\n";
                     }
                     // SourceFile handles its own comments if needed, skip printNodeCommentsIfAny
-                    return result; // Return directly for SourceFile
+                    return leadingComment + result; // Return directly for SourceFile
                 } else if (ts.isExpressionStatement(node)) {
                     result = this.printExpressionStatement(node, 0); // Let the specific func handle indent
                 } else if (ts.isBlock(node)) {
@@ -1247,20 +1252,8 @@ export class JuliaTranspiler extends BaseTranspiler {
 
             // --- Post-computation/Cleanup ---
             // Add comments IF the node kind isn't one that handles its own comments (like SourceFile)
-            const skipCommentWrapper =
-                ts.isSourceFile(node) ||
-                ts.isPropertyAssignment(node) || // Nodes that might have comments handled internally or differently
-                ts.isVariableDeclaration(node) ||
-                ts.isVariableDeclarationList(node) || // Let VariableStatement handle comments
-                ts.isBlock(node); // Blocks handle comments via their statements
-            if (!skipCommentWrapper) {
-                // Apply comments using the *original* identation level passed to printNode
-                result = this.printNodeCommentsIfAny(
-                    node,
-                    originalIdentation,
-                    result,
-                );
-            }
+            result = leadingComment + this.tmpJSDoc + result;
+            result = this.printNodeCommentsIfAny(node, identation, result)
             // conditionalDebugLog(ts.ScriptKind[node.kind]); // Use conditional log if needed
             // conditionalDebugLog(result); // Use conditional log if needed
 
@@ -2552,7 +2545,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
 
         // JSDoc handling (remains the same)
-        if (this.withinFunctionDeclaration && this.nodeContainsJsDoc(node)) {
+        if (this.withinFunctionDeclaration && this.nodeContainsJsDoc(node) && !this.doComments) {
             this.tmpJSDoc = result; // Store potential docblock
             result = ""; // Clear result so it's not duplicated
         }
@@ -3095,7 +3088,10 @@ export class JuliaTranspiler extends BaseTranspiler {
         const methodDef = this.getIden(identation) + modifiers + returnType + methodToken + name
             + "(" + parsedArgs + ")";
 
-        return this.printNodeCommentsIfAny(node, identation, methodDef);
+        this.doComments = true;
+        let result = this.printNodeCommentsIfAny(node, identation, methodDef);
+        this.doComments = false;
+        return result;
     }
 
     removeLeadingEmptyLines(text: string): string {
@@ -3131,5 +3127,41 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     transformCallExpressionName(name: string): string {
         return this.transformIdentifierForReservedKeywords(name);
+    }
+
+    printLeadingComments(node, identation) {
+        const fullText = global.src.getFullText();
+        const commentsRangeList = ts.getLeadingCommentRanges(
+            fullText,
+            node.pos,
+        );
+        const commentsRange = commentsRangeList ? commentsRangeList : undefined;
+        let res = "";
+        if (commentsRange) {
+            for (const commentRange of commentsRange) {
+                const commentText = fullText.slice(
+                    commentRange.pos,
+                    commentRange.end,
+                );
+                if (commentText !== undefined) {
+                    const formatted = commentText
+                        .split("\n")
+                        .map((line) => line.trim())
+                        .map((line) =>
+                            !line.trim().startsWith("*")
+                                ? this.getIden(identation) + line
+                                : this.getIden(identation) + " " + line,
+                        )
+                        .join("\n");
+                    res += this.transformLeadingComment(formatted) + "\n";
+                }
+            }
+        }
+        if (this.transpiledComments.has(res) && !this.doComments) {
+            return "";
+        } else {
+            this.transpiledComments.add(res);
+            return res;
+        }
     }
 }

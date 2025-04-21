@@ -543,7 +543,7 @@ yy = [v for v in values(x)];
 
     test('comments', () => {
         const ts = "// This is a comment\n/* Multi-line\ncomment */";
-        const julia = "# This is a comment\n#= Multi-line\ncomment =#\n";
+        const julia = "# This is a comment\n#= Multi-line\ncomment =#\n\n";
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
@@ -967,17 +967,6 @@ no = !yes;
             `@kwdef struct ClassWithOnlyMethod
     myMethod::Function = myMethod
 end
-"""
-fetchStatus(params)
-
-the latest known information on the availability of the exchange API
-
-# Arguments
-- \`params\`::Dict: extra parameters specific to the aax api endpoint
-
-# Returns
-- \`Dict\`: a [\`status structure\`](https://docs.ccxt.com/en/latest/manual.html#exchange-status-structure)
-"""
 function myMethod(self::ClassWithOnlyMethod, arg)
     return arg + 1;
 end
@@ -1077,7 +1066,7 @@ function describe(self::binance, )
     return self.deepExtend(self, superDescribe, self.describeData(self));
 end
 """
-watchLiquidations(params)
+watchLiquidations()
 
 watch the public liquidations of a trading pair
 @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
@@ -1132,7 +1121,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('parseInt and parseFloat with variables', () => {
+    test('parseInt and parseFloat with variables', () => {
         const ts = `const str = '123';
 const intVal = parseInt(str);
 const floatStr = '123.45';
@@ -1142,6 +1131,20 @@ intVal = parse(Int, str);
 floatStr = raw"123.45";
 floatVal = parse(Float64, floatStr);
 `;
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+    test('comments and call', () => {
+        const ts = `if (nonce === undefined) {
+    let abc = 1;
+    // 2. Buffer the events you receive from the stream.
+    orderbook.cache.push (message);
+}`
+        const julia = `if nonce === nothing
+    abc = 1;
+    # 2. Buffer the events you receive from the stream.
+    push!(orderbook.cache, message);
+end`
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
