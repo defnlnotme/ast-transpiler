@@ -115,7 +115,7 @@ end;\n`;
     if 2
         if 4
             if 5
-                x = Dict();
+                x = Dict{Symbol, Any}();
             end
         end
     end
@@ -603,8 +603,8 @@ yy = [v for v in values(x)];
 const y = 1 !== undefined;
 const c = 3 == undefined;`;
         const julia =
-            `x = 1 == nothing;
-y = 1 != nothing;
+            `x = 1 === nothing;
+y = 1 !== nothing;
 c = 3 == nothing;
 `;
         const output = transpiler.transpileJulia(ts).content;
@@ -1066,7 +1066,7 @@ function describe(self::binance, )
     return self.deepExtend(self, superDescribe, self.describeData(self));
 end
 """
-watchLiquidations()
+watchLiquidations(params)
 
 watch the public liquidations of a trading pair
 @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
@@ -1144,7 +1144,7 @@ floatVal = parse(Float64, floatStr);
     abc = 1;
     # 2. Buffer the events you receive from the stream.
     push!(orderbook.cache, message);
-end`
+end\n`
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });

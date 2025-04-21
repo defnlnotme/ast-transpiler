@@ -585,16 +585,16 @@ export class JuliaTranspiler extends BaseTranspiler {
             return customBinaryExp;
         }
 
-        if (node.operatorToken.kind == ts.SyntaxKind.InstanceOfKeyword) {
+        if (node. operatorToken.kind == ts.SyntaxKind.InstanceOfKeyword) {
             return this.printInstanceOfExpression(node, identation);
         }
 
-        let operator = this.SupportedKindNames[node.operatorToken.kind];
+        let operator = this.SupportedKindNames[node. operatorToken.kind];
 
         // String concatenation check
         if (operatorToken.kind === ts.SyntaxKind.PlusToken) {
-            const leftType = global.checker.getTypeAtLocation(left);
-            const rightType = global.checker.getTypeAtLocation(right);
+            const leftType = global. checker.getTypeAtLocation(left);
+            const rightType = global. checker.getTypeAtLocation(right);
             if (
                 this.isStringType(leftType.flags) ||
                 this.isStringType(rightType.flags)
@@ -675,28 +675,14 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
 
         const customOperator = this.getCustomOperatorIfAny(
-            leftVar,
-            rightVar,
+            left, // Pass raw nodes to allow getText() etc.
+            right, // Pass raw nodes
             operatorToken,
         );
 
-        operator = customOperator ? customOperator : operator;
+        operator = customOperator !== undefined ? customOperator : operator; // Check if customOperator is explicitly undefined
 
-        if (
-            operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
-            operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken
-        ) {
-            operator = "==";
-        }
-
-        if (
-            operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
-            operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken
-        ) {
-            operator = "!=";
-        }
-
-        return leftVar + " " + operator + " " + rightVar.trim();
+        return leftVar + " " + operator.trim() + " " + rightVar.trim(); // Trim operator and rightVar
     }
 
     printStringLiteral(node) {
@@ -901,7 +887,6 @@ export class JuliaTranspiler extends BaseTranspiler {
                     );
 
                     if (ts.isIfStatement(stmt)) {
-                        // Nested if statement - revert to increased identation for nested ifs
                         result += this.printIfStatement(stmt, identation + 1);
                     } else {
                         // Regular statement - for objects use Dict() and correct identation
@@ -914,12 +899,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                                     .initializer,
                             )
                         ) {
-                            result +=
-                                this.printNode(
-                                    stmt.declarationList.declarations[0].name,
-                                    identation + 1,
-                                ) +
-                                " = Dict();\n";
+                            result += this.printNode(stmt, identation + 1) + "\n";
                         } else {
                             result +=
                                 this.printNode(stmt, identation + 1) +
@@ -928,7 +908,6 @@ export class JuliaTranspiler extends BaseTranspiler {
                     }
                 });
             } else if (ts.isIfStatement(node.thenStatement)) {
-                // Directly nested if without a block - revert to increased identation
                 result += this.printIfStatement(
                     node.thenStatement,
                     identation + 1,
@@ -970,8 +949,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                     );
                 } else {
                     result +=
-                        this.getIden(identation + 1) +
-                        this.printNode(elseIfNode.thenStatement, 0) +
+                        this.printNode(elseIfNode.thenStatement, identation + 1) +
                         "\n";
                 }
 
@@ -1042,7 +1020,7 @@ export class JuliaTranspiler extends BaseTranspiler {
 
             let leadingComment = "";
             if (!this.withinFunctionDeclaration) {
-                leadingComment = this.printLeadingComments(node, identation).trimLeft();
+                leadingComment = this.printLeadingComments(node, identation);
             }
             if (this.transpiledComments.has(this.tmpJSDoc)) {
                 this.tmpJSDoc = ""
@@ -1131,11 +1109,11 @@ export class JuliaTranspiler extends BaseTranspiler {
                     // SourceFile handles its own comments if needed, skip printNodeCommentsIfAny
                     return leadingComment + result; // Return directly for SourceFile
                 } else if (ts.isExpressionStatement(node)) {
-                    result = this.printExpressionStatement(node, 0); // Let the specific func handle indent
+                    result = this.printExpressionStatement(node, identation);
                 } else if (ts.isBlock(node)) {
-                    result = this.printBlock(node, identation); // Pass indentation
+                    result = this.printBlock(node, identation);
                 } else if (ts.isFunctionDeclaration(node)) {
-                    result = this.printFunctionDeclaration(node, identation); // Pass indentation
+                    result = this.printFunctionDeclaration(node, identation);
                 } else if (
                     ts.isFunctionExpression(node) ||
                     ts.isArrowFunction(node)
@@ -1147,14 +1125,14 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result = this.printClass(node, identation);
                 } else if (ts.isVariableStatement(node)) {
                     // Variable statement contains declaration list
-                    result = this.printVariableStatement(node, 0); // Let func handle indent
+                    result = this.printVariableStatement(node, identation);
                 } else if (ts.isVariableDeclarationList(node)) {
                     // Usually handled by printVariableStatement, but could appear elsewhere (e.g., for loop initializer)
-                    result = this.printVariableDeclarationList(node, 0); // Let func handle indent
+                    result = this.printVariableDeclarationList(node, identation);
                 } else if (ts.isVariableDeclaration(node)) {
                     // This case should ideally only be hit if it's NOT a function expression assignment
                     // that was handled earlier, or if it's part of a declaration list processed directly.
-                    result = this.printVariableDeclaration(node, 0); // Let func handle indent
+                    result = this.printVariableDeclaration(node, identation);
                 } else if (ts.isMethodDeclaration(node)) {
                     result = this.printMethodDeclaration(node, identation);
                 } else if (ts.isStringLiteral(node)) {
@@ -1162,33 +1140,33 @@ export class JuliaTranspiler extends BaseTranspiler {
                 } else if (ts.isNumericLiteral(node)) {
                     result = this.printNumericLiteral(node);
                 } else if (ts.isPropertyAccessExpression(node)) {
-                    result = this.printPropertyAccessExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printPropertyAccessExpression(node, identation);
                 } else if (ts.isArrayLiteralExpression(node)) {
-                    result = this.printArrayLiteralExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printArrayLiteralExpression(node, identation);
                 } else if (ts.isCallExpression(node)) {
-                    result = this.printCallExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printCallExpression(node, identation);
                 } else if (ts.isWhileStatement(node)) {
                     result = this.printWhileStatement(node, identation);
                 } else if (ts.isBinaryExpression(node)) {
-                    result = this.printBinaryExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printBinaryExpression(node, identation);
                 } else if (ts.isBreakStatement(node)) {
-                    result = this.printBreakStatement(node, 0); // Let func handle indent
+                    result = this.printBreakStatement(node, identation);
                 } else if (ts.isForStatement(node)) {
                     result = this.printForStatement(node, identation);
                 } else if (ts.isPostfixUnaryExpression(node)) {
-                    result = this.printPostFixUnaryExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printPostFixUnaryExpression(node, identation);
                 } else if (ts.isObjectLiteralExpression(node)) {
-                    result = this.printObjectLiteralExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printObjectLiteralExpression(node, identation);
                 } else if (ts.isPropertyAssignment(node)) {
-                    result = this.printPropertyAssignment(node, identation + 1); // Indent property assignments within objects/classes
+                    result = this.printPropertyAssignment(node, identation + 1);
                 } else if (ts.isIdentifier(node)) {
                     result = this.printIdentifier(node);
                 } else if (ts.isElementAccessExpression(node)) {
-                    result = this.printElementAccessExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printElementAccessExpression(node, identation);
                 } else if (ts.isIfStatement(node)) {
                     result = this.printIfStatement(node, identation);
                 } else if (ts.isParenthesizedExpression(node)) {
-                    result = this.printParenthesizedExpression(node, 0); // Inner expression handles indent
+                    result = this.printParenthesizedExpression(node, identation);
                 } else if ((ts as any).isBooleanLiteral(node)) {
                     result = this.printBooleanLiteral(node);
                 } else if (ts.SyntaxKind.ThisKeyword === node.kind) {
@@ -1198,35 +1176,35 @@ export class JuliaTranspiler extends BaseTranspiler {
                 } else if (ts.isTryStatement(node)) {
                     result = this.printTryStatement(node, identation);
                 } else if (ts.isPrefixUnaryExpression(node)) {
-                    result = this.printPrefixUnaryExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printPrefixUnaryExpression(node, identation);
                 } else if (ts.isNewExpression(node)) {
-                    result = this.printNewExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printNewExpression(node, identation);
                 } else if (ts.isThrowStatement(node)) {
-                    result = this.printThrowStatement(node, 0); // Let func handle indent
+                    result = this.printThrowStatement(node, identation);
                 } else if (ts.isAwaitExpression(node)) {
-                    result = this.printAwaitExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printAwaitExpression(node, identation);
                 } else if (ts.isConditionalExpression(node)) {
-                    result = this.printConditionalExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printConditionalExpression(node, identation);
                 } else if (ts.isAsExpression(node)) {
-                    result = this.printAsExpression(node, 0); // Expressions usually don't need outer indent
+                    result = this.printAsExpression(node, identation);
                 } else if (ts.isReturnStatement(node)) {
-                    result = this.printReturnStatement(node, 0); // Let func handle indent
+                    result = this.printReturnStatement(node, identation);
                 } else if (ts.isArrayBindingPattern(node)) {
                     result = this.printArrayBindingPattern(node, identation);
                 } else if (ts.isParameter(node)) {
                     result = this.printParameter(node);
                 } else if (ts.isConstructorDeclaration(node)) {
-                    result = this.printConstructorDeclaration(node, identation); // Pass indentation
+                    result = this.printConstructorDeclaration(node, identation);
                 } else if (ts.isPropertyDeclaration(node)) {
-                    result = this.printPropertyDeclaration(node, 0); // Let func handle indent - usually within a class
+                    result = this.printPropertyDeclaration(node, identation); // within a class
                 } else if (ts.isSpreadElement(node)) {
-                    result = this.printSpreadElement(node, 0); // Let func handle indent
+                    result = this.printSpreadElement(node, identation);
                 } else if (ts.SyntaxKind.NullKeyword === node.kind) {
-                    result = this.printNullKeyword(node, 0); // Let func handle indent
+                    result = this.printNullKeyword(node, identation);
                 } else if (ts.isContinueStatement(node)) {
-                    result = this.printContinueStatement(node, 0); // Let func handle indent
+                    result = this.printContinueStatement(node, identation);
                 } else if (ts.isDeleteExpression(node)) {
-                    result = this.printDeleteExpression(node, 0); // Let func handle indent
+                    result = this.printDeleteExpression(node, identation);
                 } else if (ts.isExportDeclaration(node)) { // <--- ADD THIS BLOCK
                     // Julia's module system and export mechanisms are different.
                     // For now, we remove the ES export declarations.
@@ -1250,6 +1228,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             // --- Post-computation/Cleanup ---
             // Add comments IF the node kind isn't one that handles its own comments (like SourceFile)
             result = leadingComment + this.tmpJSDoc + result;
+            this.tmpJSDoc = "";
             result = this.printNodeCommentsIfAny(node, identation, result)
             // conditionalDebugLog(ts.ScriptKind[node.kind]); // Use conditional log if needed
             // conditionalDebugLog(result); // Use conditional log if needed
@@ -1570,7 +1549,7 @@ export class JuliaTranspiler extends BaseTranspiler {
              // Check member name for specific methods that might be called on instances like strings or arrays.
              // These also map to functions where the instance is the first argument (in Julia's generated code).
              const memberName = memberNameNode.text;
-             const parsedBase = this.printNode(baseExpression, 0); // The expression before the dot
+             const parsedBase = this.printNode(baseExpression, identation); // The expression before the dot
              const args = node.arguments ?? []; // arguments as array
              // Handle specific member calls like push, includes, indexOf, string methods, etc.
              // These need the *instance* (parsedBase) as the first argument in the Julia function call.
@@ -2255,7 +2234,7 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printArrayPushCall(node, identation, name, parsedArg) {
-        return `push!(${name}, ${parsedArg})`;
+        return this.getIden(identation) + `push!(${name}, ${parsedArg})`;
     }
 
     printSplitCall(node: any, identation: any, name?: any, parsedArg?: any) {
@@ -3153,11 +3132,35 @@ export class JuliaTranspiler extends BaseTranspiler {
                 }
             }
         }
-        if (this.transpiledComments.has(res) && !this.doComments) {
+        let res_trim = res.trim();
+        if (this.transpiledComments.has(res_trim) && !this.doComments) {
             return "";
         } else {
-            this.transpiledComments.add(res);
+            this.transpiledComments.add(res_trim);
             return res;
         }
+    }
+
+    getCustomOperatorIfAny(left, right, operator) {
+        const rightText = this.printNode(right, 0).trim(); // Print right side for comparison
+        const opkind = operator.kind;
+
+        // Special handling ONLY for strict comparisons with `undefined` (Julia `nothing`)
+        if (rightText === this.UNDEFINED_TOKEN) {
+            switch (opkind) {
+                case ts.SyntaxKind.EqualsEqualsEqualsToken: // === undefined
+                    return "==="; // Maps to Julia's strict equality
+                case ts.SyntaxKind.ExclamationEqualsEqualsToken: // !== undefined
+                    return "!=="; // Maps to Julia's strict inequality
+                // For loose equality (== undefined) and loose inequality (!= undefined)
+                // we explicitly *don't* return a custom operator here.
+                // `printBinaryExpression` will then use the default mapping
+                // for `==` and `!=`, which are "==" and "!=" respectively,
+                // resulting in `something == nothing` or `something != nothing`.
+            }
+        }
+
+        // No custom override for other operators or non-undefined comparisons
+        return undefined;
     }
 }
