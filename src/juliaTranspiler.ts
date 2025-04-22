@@ -403,7 +403,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         if (node.body) {
             if (ts.isBlock(node.body)) {
                 // Pass identation + 1 to printBlock for indenting statements inside
-                funcBody = this.printBlock(node.body, identation);
+                funcBody = this.printBlock(node.body, identation + 1);
             } else {
                 // Handle expression body (e.g., arrow functions) if needed, though less common in this context
                 funcBody =
@@ -466,7 +466,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             const statementStr = this.printNode(statement, identation).trim(); // Get statement without extra indent/newline
             if (statementStr) {
                 // Only add non-empty statements
-                result += this.getIden(identation + 1) + statementStr + "\n"; // Add correct indent + statement + newline
+                result += this.getIden(identation) + statementStr + "\n"; // Add correct indent + statement + newline
             }
         });
         // Return empty string if no statements, otherwise return with the final newline
@@ -939,7 +939,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         const elseStatement = node.elseStatement;
         if (elseStatement) {
             if (elseStatement?.kind === ts.SyntaxKind.Block) {
-                const elseBlock = this.printBlock(elseStatement, identation);
+                const elseBlock = this.printBlock(elseStatement, identation + 1);
                 result +=
                     this.getIden(identation) +
                     this.ELSE_TOKEN +
@@ -961,7 +961,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 if (ts.isBlock(elseIfNode.thenStatement)) {
                     result += this.printBlock(
                         elseIfNode.thenStatement,
-                        identation,
+                        identation + 1,
                     );
                 } else {
                     result +=
@@ -977,7 +977,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                     if (elseOfElseIf?.kind === ts.SyntaxKind.Block) {
                         const elseBlock = this.printBlock(
                             elseOfElseIf,
-                            identation, // identation + 1 -> + 0, FIX: use identation + 1 here
+                            identation + 1, // identation + 1 -> + 0, FIX: use identation + 1 here
                         );
                         result +=
                             this.getIden(identation) +
@@ -1405,6 +1405,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         let result = this.tmpJSDoc + methodDef + this.getBlockClose(identation);
         this.tmpJSDoc = "";
         this.currentFunctionName = "";
+        this.currentFunctionParams = "";
         return result;
     }
 
@@ -1480,13 +1481,13 @@ export class JuliaTranspiler extends BaseTranspiler {
                 this.getIden(identation) +
                 `let task = @async ${parsedExpression}\n`;
             result +=
-                this.getIden(identation + 2) + `${tempVar} = fetch(task)\n`;
-            result += this.getIden(identation + 2) + `if ${tempVar} isa Task\n`;
-            result += this.getIden(identation + 3) + `fetch(${tempVar})\n`; // Fetch the nested task
-            result += this.getIden(identation + 2) + `else\n`;
-            result += this.getIden(identation + 3) + `${tempVar}\n`; // Directly return the value
-            result += this.getIden(identation + 2) + `end\n`;
-            result += this.getIden(identation + 1) + `end`;
+                this.getIden(identation + 1) + `${tempVar} = fetch(task)\n`;
+            result += this.getIden(identation + 1) + `if ${tempVar} isa Task\n`;
+            result += this.getIden(identation + 2) + `fetch(${tempVar})\n`; // Fetch the nested task
+            result += this.getIden(identation + 1) + `else\n`;
+            result += this.getIden(identation + 2) + `${tempVar}\n`; // Directly return the value
+            result += this.getIden(identation + 1) + `end\n`;
+            result += this.getIden(identation) + `end`;
 
             // Note: The calling printNode function (e.g., printReturnStatement) will wrap this
             // in printNodeCommentsIfAny and add the final LINE_TERMINATOR if required.
@@ -2190,6 +2191,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         let result = this.tmpJSDoc + methodDef;
         this.tmpJSDoc = "";
         this.currentFunctionName = "";
+        this.currentFunctionParams = "";
         return result;
     }
 
@@ -2213,7 +2215,7 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printThrowStatement(node, identation) {
-        const expression = this.printNode(node.expression, 0);
+        const expression = this.printNode(node.expression, identation + 1);
         // Wrap the expression in parentheses for Julia's throw syntax
         return (
             this.getIden(identation) +

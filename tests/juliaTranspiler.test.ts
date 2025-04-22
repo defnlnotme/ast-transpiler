@@ -702,19 +702,19 @@ promises = await Promise.all(promises);`;
         const julia =
 `promises = [self.fetchSwapAndFutureMarkets(self, params), self.fetchUSDCMarkets(self, params)];
 promises = let task = @async [fetch(p) for p in promises]
-        ans = fetch(task)
-        if ans isa Task
-            fetch(ans)
-        else
-            ans
-        end
+    ans = fetch(task)
+    if ans isa Task
+        fetch(ans)
+    else
+        ans
     end
+end
 `;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
 
-    test('convert JS doc to Julia doc', () => {
+    test.only('convert JS doc to Julia doc', () => {
         const ts =
             `function fetchStatus(params) {
     /**
@@ -1066,7 +1066,7 @@ function describe(self::binance, )
     return self.deepExtend(self, superDescribe, self.describeData(self));
 end
 """
-watchLiquidations(params)
+watchLiquidations()
 
 watch the public liquidations of a trading pair
 @see https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Liquidation-Order-Streams
@@ -1083,13 +1083,13 @@ watch the public liquidations of a trading pair
 """
 function watchLiquidations(self::binance, symbol, since=nothing, limit=nothing, params=Dict())
     return let task = @async self.watchLiquidationsForSymbols(self, [symbol], since, limit, params)
-        ans = fetch(task)
-        if ans isa Task
-            fetch(ans)
-        else
-            ans
-        end
-    end;
+    ans = fetch(task)
+    if ans isa Task
+        fetch(ans)
+    else
+        ans
+    end
+end;
 end
 
 function Base.getproperty(self::binance, name::Symbol)
@@ -1146,9 +1146,9 @@ floatVal = parse(Float64, floatStr);
         const julia =
 `function handleOrderBook(client, message)
     if nonce === nothing
-        abc = 1
+        abc = 1;
         # 2. Buffer the events you receive from the stream.
-        push!(orderbook.cache, message)
+        push!(orderbook.cache, message);
     end
 end;
 `
