@@ -1135,16 +1135,23 @@ floatVal = parse(Float64, floatStr);
         expect(output).toBe(julia);
     });
     test('comments and call', () => {
-        const ts = `if (nonce === undefined) {
-    let abc = 1;
-    // 2. Buffer the events you receive from the stream.
-    orderbook.cache.push (message);
-}`
-        const julia = `if nonce === nothing
-    abc = 1;
-    # 2. Buffer the events you receive from the stream.
-    push!(orderbook.cache, message);
-end\n`
+        const ts =
+`function handleOrderBook (client: Client, message) {
+    if (nonce === undefined) {
+        let abc = 1;
+        // 2. Buffer the events you receive from the stream.
+        orderbook.cache.push (message);
+    }
+}`;
+        const julia =
+`function handleOrderBook(client, message)
+    if nonce === nothing
+        abc = 1
+        # 2. Buffer the events you receive from the stream.
+        push!(orderbook.cache, message)
+    end
+end;
+`
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });

@@ -21,7 +21,6 @@ const conditionalDebugLog = (...args: any[]) => {
 };
 // --- End Conditional Debug Logging ---
 
-
 const SyntaxKind = ts.SyntaxKind;
 
 const parserConfig = {
@@ -168,49 +167,48 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         this.ReservedKeywordsReplacements = {
             // List of Julia reserved keywords
-            'abstract': 'abstract_var',
-            'baremodule': 'baremodule_var',
-            'begin': 'begin_var',
-            'break': 'break_var',
-            'catch': 'catch_var',
-            'const': 'const_var',
-            'continue': 'continue_var',
-            'do': 'do_var',
-            'else': 'else_var',
-            'elseif': 'elseif_var',
-            'end': 'end_var',
-            'export': 'export_var',
-            'false': 'false_var',
-            'finally': 'finally_var',
-            'for': 'for_var',
-            'function': 'function_var',
-            'global': 'global_var',
-            'if': 'if_var',
-            'import': 'import_var',
-            'let': 'let_var',
-            'local': 'local_var',
-            'macro': 'macro_var',
-            'module': 'module_var',
-            'mutable': 'mutable_var',
-            'primitive': 'primitive_var',
-            'quote': 'quote_var',
-            'return': 'return_var',
-            'struct': 'struct_var',
-            'true': 'true_var',
-            'try': 'try_var',
-            'type': 'type_var',
-            'using': 'using_var',
-            'while': 'while_var',
+            abstract: "abstract_var",
+            baremodule: "baremodule_var",
+            begin: "begin_var",
+            break: "break_var",
+            catch: "catch_var",
+            const: "const_var",
+            continue: "continue_var",
+            do: "do_var",
+            else: "else_var",
+            elseif: "elseif_var",
+            end: "end_var",
+            export: "export_var",
+            false: "false_var",
+            finally: "finally_var",
+            for: "for_var",
+            function: "function_var",
+            global: "global_var",
+            if: "if_var",
+            import: "import_var",
+            let: "let_var",
+            local: "local_var",
+            macro: "macro_var",
+            module: "module_var",
+            mutable: "mutable_var",
+            primitive: "primitive_var",
+            quote: "quote_var",
+            return: "return_var",
+            struct: "struct_var",
+            true: "true_var",
+            try: "try_var",
+            type: "type_var",
+            using: "using_var",
+            while: "while_var",
         };
     }
-
-
 
     printVariableStatement(
         node: ts.VariableStatement,
         identation: number,
     ): string {
-        conditionalDebugLog( // Changed from console.debug
+        conditionalDebugLog(
+            // Changed from console.debug
             "Entering printVariableStatement function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
@@ -228,16 +226,16 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Apply leading indentation to the whole statement result.
         const trimmedResult = result.trim();
         if (trimmedResult !== "") {
-             // If the result doesn't already end with the terminator (e.g. complex statements might add their own)
+            // If the result doesn't already end with the terminator (e.g. complex statements might add their own)
             if (!trimmedResult.endsWith(this.LINE_TERMINATOR)) {
-                 result += this.LINE_TERMINATOR;
+                result += this.LINE_TERMINATOR;
             }
-             // Apply outer indentation
+            // Apply outer indentation
             // NOTE: If printNode for declaration list somehow adds its own unwanted indent, this might double it.
             // Need to ensure printVariableDeclarationList/printVariableDeclaration don't add outer indent.
             result = this.getIden(identation) + result; // Apply identation here
             // Add newline if the result doesn't end with one (blocks typically do)
-            if (!result.endsWith('\n')) {
+            if (!result.endsWith("\n")) {
                 // result += '\n'; // Temporarily removed as tests don't expect extra newlines after simple vars
             }
         } else {
@@ -251,15 +249,19 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableDeclarationList,
         identation: number, // Usually 0 when called from VariableStatement
     ): string {
-        conditionalDebugLog( // Changed from console.debug
+        conditionalDebugLog(
+            // Changed from console.debug
             "Entering printVariableDeclarationList function",
             ts.SyntaxKind[node.kind],
         ); // Debug log
         // Process declarations and join them. Semicolons/newlines are handled by VariableStatement.
         // Pass 0 for indentation to declarations, as VariableStatement handles the line indent.
-        return node.declarations.map((declaration) => {
-            return this.printVariableDeclaration(declaration, 0); // Pass 0 indent
-        }).filter(d => d.trim() !== "").join(", "); // Join multiple declarations if needed (though less common in TS community code)
+        return node.declarations
+            .map((declaration) => {
+                return this.printVariableDeclaration(declaration, 0); // Pass 0 indent
+            })
+            .filter((d) => d.trim() !== "")
+            .join(", "); // Join multiple declarations if needed (though less common in TS community code)
         // Note: Joining with ", " might be wrong if Julia expects separate lines.
         // Assuming one declaration per statement for now based on tests. If multiple needed, revise joiner.
         // Returning the raw content, VariableStatement adds terminator/newline/indent.
@@ -269,10 +271,12 @@ export class JuliaTranspiler extends BaseTranspiler {
         node: ts.VariableDeclaration,
         identation: number,
     ): string {
-        conditionalDebugLog( // Changed from console.debug
+        conditionalDebugLog(
+            // Changed from console.debug
             "Entering printVariableDeclaration function",
             ts.SyntaxKind[node.kind],
-            "Node Name Kind:", ts.SyntaxKind[node.name.kind] // Added log for name kind
+            "Node Name Kind:",
+            ts.SyntaxKind[node.name.kind], // Added log for name kind
         );
 
         const nameNode = node.name;
@@ -281,20 +285,24 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Handle Function Expression Assignment first
         if (
             initializer &&
-            (ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer)) &&
+            (ts.isFunctionExpression(initializer) ||
+                ts.isArrowFunction(initializer)) &&
             this.removeVariableDeclarationForFunctionExpression === false
         ) {
             let varName = "#FUNC_ASSIGN_ERROR#"; // Placeholder
-             if (ts.isIdentifier(nameNode)) {
+            if (ts.isIdentifier(nameNode)) {
                 varName = nameNode.escapedText as string;
-             } else {
-                 // Need to handle assignment to patterns carefully here if needed
-                 varName = this.printNode(nameNode, 0); // Fallback
-             }
-            if (varName in this.ReservedKeywordsReplacements) {
-                varName += "_var"
+            } else {
+                // Need to handle assignment to patterns carefully here if needed
+                varName = this.printNode(nameNode, 0); // Fallback
             }
-            return this.printFunctionExpressionAsDeclaration(initializer, varName);
+            if (varName in this.ReservedKeywordsReplacements) {
+                varName += "_var";
+            }
+            return this.printFunctionExpressionAsDeclaration(
+                initializer,
+                varName,
+            );
         }
 
         // Handle Array Binding Pattern
@@ -308,25 +316,30 @@ export class JuliaTranspiler extends BaseTranspiler {
         if (ts.isIdentifier(nameNode)) {
             let varName = nameNode.escapedText as string;
             if (varName in this.ReservedKeywordsReplacements) {
-                varName += "_var"
+                varName += "_var";
             }
             if (initializer) {
                 // If the initializer was a function expression, it should have been caught above
-                 const printedInitializer = this.printNode(initializer, 0);
-                 // printVariableStatement will add the semicolon
-                 return `${varName} = ${printedInitializer}`; // Return directly, NO SEMICOLON here
+                const printedInitializer = this.printNode(initializer, 0);
+                // printVariableStatement will add the semicolon
+                return `${varName} = ${printedInitializer}`; // Return directly, NO SEMICOLON here
             } else {
                 // Julia requires initialization or type annotation.
-                 return ""; // Return empty for uninitialized simple vars for now.
+                return ""; // Return empty for uninitialized simple vars for now.
             }
         }
 
         // Fallback/Error for other complex BindingName types (e.g., ObjectBindingPattern)
-         console.warn("Unhandled BindingName type in printVariableDeclaration:", ts.SyntaxKind[nameNode.kind]);
-         const printedName = this.printNode(nameNode, 0);
-         const printedInitializer = initializer ? ` = ${this.printNode(initializer, 0)}` : ' = nothing # TODO: Unhandled complex binding';
-         // printVariableStatement will add the semicolon
-         return `${printedName}${printedInitializer}`; // NO SEMICOLON here
+        console.warn(
+            "Unhandled BindingName type in printVariableDeclaration:",
+            ts.SyntaxKind[nameNode.kind],
+        );
+        const printedName = this.printNode(nameNode, 0);
+        const printedInitializer = initializer
+            ? ` = ${this.printNode(initializer, 0)}`
+            : " = nothing # TODO: Unhandled complex binding";
+        // printVariableStatement will add the semicolon
+        return `${printedName}${printedInitializer}`; // NO SEMICOLON here
     }
 
     // Helper to map types (ensure it handles Dict correctly)
@@ -383,7 +396,6 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printFunctionDeclaration(node, identation) {
-
         this.withinFunctionDeclaration = true;
         let signature = this.printFunctionDefinition(node, 0); // Pass 0 for definition itself
 
@@ -486,7 +498,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                         this.DEFAULT_IDENTATION.repeat(identation) +
                         s.trimLeft();
                 }
-                s = this.removeLeadingEmptyLines(s)
+                s = this.removeLeadingEmptyLines(s);
                 if (s.length > 0) {
                     result += this.getIden(identation) + s;
                 }
@@ -585,16 +597,16 @@ export class JuliaTranspiler extends BaseTranspiler {
             return customBinaryExp;
         }
 
-        if (node. operatorToken.kind == ts.SyntaxKind.InstanceOfKeyword) {
+        if (node.operatorToken.kind == ts.SyntaxKind.InstanceOfKeyword) {
             return this.printInstanceOfExpression(node, identation);
         }
 
-        let operator = this.SupportedKindNames[node. operatorToken.kind];
+        let operator = this.SupportedKindNames[node.operatorToken.kind];
 
         // String concatenation check
         if (operatorToken.kind === ts.SyntaxKind.PlusToken) {
-            const leftType = global. checker.getTypeAtLocation(left);
-            const rightType = global. checker.getTypeAtLocation(right);
+            const leftType = global.checker.getTypeAtLocation(left);
+            const rightType = global.checker.getTypeAtLocation(right);
             if (
                 this.isStringType(leftType.flags) ||
                 this.isStringType(rightType.flags)
@@ -744,7 +756,7 @@ export class JuliaTranspiler extends BaseTranspiler {
         if (this.isCJSModuleExportsExpressionStatement(node)) {
             return ""; // remove module.exports = ...
         }
-        const exprStm = this.printNode(node.expression, 0); // Use 0 indent for the expression itself
+        const exprStm = this.printNode(node.expression, identation); // Use 0 indent for the expression itself
 
         // Skip empty statements
         if (exprStm.length === 0) {
@@ -857,7 +869,10 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printIfStatement(node, identation) {
-        conditionalDebugLog("printIfStatement called with identation:", identation); // Changed from console.debug
+        conditionalDebugLog(
+            "printIfStatement called with identation:",
+            identation,
+        ); // Changed from console.debug
         conditionalDebugLog("Node kind:", ts.SyntaxKind[node.kind]); // Changed from console.debug
 
         // Ensure identation is never negative
@@ -873,7 +888,8 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // Handle the "then" branch
         if (node.thenStatement) {
-            conditionalDebugLog( // Changed from console.debug
+            conditionalDebugLog(
+                // Changed from console.debug
                 "thenStatement kind:",
                 ts.SyntaxKind[node.thenStatement.kind],
             );
@@ -881,7 +897,8 @@ export class JuliaTranspiler extends BaseTranspiler {
             if (ts.isBlock(node.thenStatement)) {
                 // For blocks, process each statement with increased identation
                 node.thenStatement.statements.forEach((stmt, index) => {
-                    conditionalDebugLog( // Changed from console.debug
+                    conditionalDebugLog(
+                        // Changed from console.debug
                         `Statement ${index} kind:`,
                         ts.SyntaxKind[stmt.kind],
                     );
@@ -899,11 +916,11 @@ export class JuliaTranspiler extends BaseTranspiler {
                                     .initializer,
                             )
                         ) {
-                            result += this.printNode(stmt, identation + 1) + "\n";
+                            result +=
+                                this.printNode(stmt, identation + 1) + "\n";
                         } else {
                             result +=
-                                this.printNode(stmt, identation + 1) +
-                                "\n";
+                                this.printNode(stmt, identation + 1) + "\n";
                         }
                     }
                 });
@@ -915,8 +932,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             } else {
                 // Single statement - use identation + 1 for content
                 result +=
-                    this.printNode(node.thenStatement, identation + 1) +
-                    "\n";
+                    this.printNode(node.thenStatement, identation + 1) + "\n";
             }
         }
 
@@ -949,8 +965,10 @@ export class JuliaTranspiler extends BaseTranspiler {
                     );
                 } else {
                     result +=
-                        this.printNode(elseIfNode.thenStatement, identation + 1) +
-                        "\n";
+                        this.printNode(
+                            elseIfNode.thenStatement,
+                            identation + 1,
+                        ) + "\n";
                 }
 
                 if (elseIfNode.elseStatement) {
@@ -1023,7 +1041,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 leadingComment = this.printLeadingComments(node, identation);
             }
             if (this.transpiledComments.has(this.tmpJSDoc)) {
-                this.tmpJSDoc = ""
+                this.tmpJSDoc = "";
             }
             // Handle Potential Function Expression Assignment early if needed
             let isHandledFunctionExpressionAssignment = false;
@@ -1128,7 +1146,10 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result = this.printVariableStatement(node, identation);
                 } else if (ts.isVariableDeclarationList(node)) {
                     // Usually handled by printVariableStatement, but could appear elsewhere (e.g., for loop initializer)
-                    result = this.printVariableDeclarationList(node, identation);
+                    result = this.printVariableDeclarationList(
+                        node,
+                        identation,
+                    );
                 } else if (ts.isVariableDeclaration(node)) {
                     // This case should ideally only be hit if it's NOT a function expression assignment
                     // that was handled earlier, or if it's part of a declaration list processed directly.
@@ -1140,7 +1161,10 @@ export class JuliaTranspiler extends BaseTranspiler {
                 } else if (ts.isNumericLiteral(node)) {
                     result = this.printNumericLiteral(node);
                 } else if (ts.isPropertyAccessExpression(node)) {
-                    result = this.printPropertyAccessExpression(node, identation);
+                    result = this.printPropertyAccessExpression(
+                        node,
+                        identation,
+                    );
                 } else if (ts.isArrayLiteralExpression(node)) {
                     result = this.printArrayLiteralExpression(node, identation);
                 } else if (ts.isCallExpression(node)) {
@@ -1156,17 +1180,26 @@ export class JuliaTranspiler extends BaseTranspiler {
                 } else if (ts.isPostfixUnaryExpression(node)) {
                     result = this.printPostFixUnaryExpression(node, identation);
                 } else if (ts.isObjectLiteralExpression(node)) {
-                    result = this.printObjectLiteralExpression(node, identation);
+                    result = this.printObjectLiteralExpression(
+                        node,
+                        identation,
+                    );
                 } else if (ts.isPropertyAssignment(node)) {
                     result = this.printPropertyAssignment(node, identation + 1);
                 } else if (ts.isIdentifier(node)) {
                     result = this.printIdentifier(node);
                 } else if (ts.isElementAccessExpression(node)) {
-                    result = this.printElementAccessExpression(node, identation);
+                    result = this.printElementAccessExpression(
+                        node,
+                        identation,
+                    );
                 } else if (ts.isIfStatement(node)) {
                     result = this.printIfStatement(node, identation);
                 } else if (ts.isParenthesizedExpression(node)) {
-                    result = this.printParenthesizedExpression(node, identation);
+                    result = this.printParenthesizedExpression(
+                        node,
+                        identation,
+                    );
                 } else if ((ts as any).isBooleanLiteral(node)) {
                     result = this.printBooleanLiteral(node);
                 } else if (ts.SyntaxKind.ThisKeyword === node.kind) {
@@ -1205,7 +1238,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                     result = this.printContinueStatement(node, identation);
                 } else if (ts.isDeleteExpression(node)) {
                     result = this.printDeleteExpression(node, identation);
-                } else if (ts.isExportDeclaration(node)) { // <--- ADD THIS BLOCK
+                } else if (ts.isExportDeclaration(node)) {
+                    // <--- ADD THIS BLOCK
                     // Julia's module system and export mechanisms are different.
                     // For now, we remove the ES export declarations.
                     // A more sophisticated approach might involve generating Julia `export`
@@ -1215,7 +1249,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                 // ... other specific node types ...
                 else {
                     // Fallback for unhandled nodes
-                    console.warn( // Keep console.warn for actual warnings
+                    console.warn(
+                        // Keep console.warn for actual warnings
                         `[${this.id}] Unhandled node kind:`,
                         ts.SyntaxKind[node.kind],
                         "Node text:",
@@ -1229,14 +1264,15 @@ export class JuliaTranspiler extends BaseTranspiler {
             // Add comments IF the node kind isn't one that handles its own comments (like SourceFile)
             result = leadingComment + this.tmpJSDoc + result;
             this.tmpJSDoc = "";
-            result = this.printNodeCommentsIfAny(node, identation, result)
+            result = this.printNodeCommentsIfAny(node, identation, result);
             // conditionalDebugLog(ts.ScriptKind[node.kind]); // Use conditional log if needed
             // conditionalDebugLog(result); // Use conditional log if needed
 
             return result;
         } catch (e) {
             // ... (error handling remains the same, use console.error) ...
-            console.error( // Keep console.error for actual errors
+            console.error(
+                // Keep console.error for actual errors
                 "Error processing node:",
                 node.getText()?.substring(0, 200),
             ); // Log more text
@@ -1295,9 +1331,11 @@ export class JuliaTranspiler extends BaseTranspiler {
             const nameAsString = this.printNode(name, 0);
             // Use Symbol constructor if the name isn't a simple identifier/string
             nameKey = `Symbol(${nameAsString})`;
-             // Potentially unsafe if nameAsString evaluates to something unexpected.
-             // Consider if this case needs more robust handling.
-             console.warn(`[JuliaTranspiler] Complex property name used as Dict key: ${nameAsString}. Generating Symbol(${nameAsString}). Review if this is intended.`);
+            // Potentially unsafe if nameAsString evaluates to something unexpected.
+            // Consider if this case needs more robust handling.
+            console.warn(
+                `[JuliaTranspiler] Complex property name used as Dict key: ${nameAsString}. Generating Symbol(${nameAsString}). Review if this is intended.`,
+            );
         }
 
         const customRightSide = this.printCustomRightSidePropertyAssignment(
@@ -1313,14 +1351,18 @@ export class JuliaTranspiler extends BaseTranspiler {
         let trailingComment = this.printTraillingComment(node, identation); // Use outer identation for comment positioning
         trailingComment = trailingComment ? " " + trailingComment : ""; // Add leading space if comment exists
 
-        const propOpen = this.PROPERTY_ASSIGNMENT_OPEN ? this.PROPERTY_ASSIGNMENT_OPEN + " " : "";
-        const propClose = this.PROPERTY_ASSIGNMENT_CLOSE ? " " + this.PROPERTY_ASSIGNMENT_CLOSE : "";
+        const propOpen = this.PROPERTY_ASSIGNMENT_OPEN
+            ? this.PROPERTY_ASSIGNMENT_OPEN + " "
+            : "";
+        const propClose = this.PROPERTY_ASSIGNMENT_CLOSE
+            ? " " + this.PROPERTY_ASSIGNMENT_CLOSE
+            : "";
 
         // Apply indentation to the whole line
         return (
             this.getIden(identation) +
             propOpen +
-            nameKey +              // Use the formatted Symbol key
+            nameKey + // Use the formatted Symbol key
             " => " +
             valueAsString.trim() + // Value itself shouldn't have outer indent
             propClose +
@@ -1372,15 +1414,14 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // Get modifiers string from base, then potentially remove 'async' if asyncTranspiling is true
         let modifiers = super.printModifiers(node);
-         if (this.asyncTranspiling && modifiers.includes(this.ASYNC_TOKEN)) {
-             // Remove the async token from the string
-             modifiers = modifiers.replace(this.ASYNC_TOKEN, "").trim();
-         }
-         modifiers = modifiers ? modifiers + " ": ""; // Add space after modifiers if any
+        if (this.asyncTranspiling && modifiers.includes(this.ASYNC_TOKEN)) {
+            // Remove the async token from the string
+            modifiers = modifiers.replace(this.ASYNC_TOKEN, "").trim();
+        }
+        modifiers = modifiers ? modifiers + " " : ""; // Add space after modifiers if any
 
         result += modifiers;
         result += this.FUNCTION_TOKEN + " ";
-
 
         let functionName = "";
         if (ts.isFunctionDeclaration(node) && node.name) {
@@ -1432,240 +1473,329 @@ export class JuliaTranspiler extends BaseTranspiler {
         // The entire let block returns the final value.
 
         if (this.asyncTranspiling) {
-             // Generate the Julia let block structure
-             const tempVar = "ans"; // Use 'ans' as the temporary variable name
+            // Generate the Julia let block structure
+            const tempVar = "ans"; // Use 'ans' as the temporary variable name
 
-             let result = this.getIden(identation) + `let task = @async ${parsedExpression}\n`;
-             result += this.getIden(identation + 2) + `${tempVar} = fetch(task)\n`;
-             result += this.getIden(identation + 2) + `if ${tempVar} isa Task\n`;
-             result += this.getIden(identation + 3) + `fetch(${tempVar})\n`; // Fetch the nested task
-             result += this.getIden(identation + 2) + `else\n`;
-             result += this.getIden(identation + 3) + `${tempVar}\n`; // Directly return the value
-             result += this.getIden(identation + 2) + `end\n`;
-             result += this.getIden(identation + 1) + `end`;
+            let result =
+                this.getIden(identation) +
+                `let task = @async ${parsedExpression}\n`;
+            result +=
+                this.getIden(identation + 2) + `${tempVar} = fetch(task)\n`;
+            result += this.getIden(identation + 2) + `if ${tempVar} isa Task\n`;
+            result += this.getIden(identation + 3) + `fetch(${tempVar})\n`; // Fetch the nested task
+            result += this.getIden(identation + 2) + `else\n`;
+            result += this.getIden(identation + 3) + `${tempVar}\n`; // Directly return the value
+            result += this.getIden(identation + 2) + `end\n`;
+            result += this.getIden(identation + 1) + `end`;
 
-             // Note: The calling printNode function (e.g., printReturnStatement) will wrap this
-             // in printNodeCommentsIfAny and add the final LINE_TERMINATOR if required.
-             return result;
-
+            // Note: The calling printNode function (e.g., printReturnStatement) will wrap this
+            // in printNodeCommentsIfAny and add the final LINE_TERMINATOR if required.
+            return result;
         } else {
-             // If async transpiling is off, just output the expression itself.
-             // The 'awaitToken' is already removed by printModifiers when asyncTranspiling is false.
+            // If async transpiling is off, just output the expression itself.
+            // The 'awaitToken' is already removed by printModifiers when asyncTranspiling is false.
             return parsedExpression;
         }
     }
 
-    printCallExpression(node: ts.CallExpression, identation: number): string {
-        conditionalDebugLog("Entering printCallExpression function", ts.SyntaxKind[node.kind]);
+    printCallExpression(node: ts.CallExpression, identation: number): string { // Keep identation param, but maybe don't use it directly for the final string
+        conditionalDebugLog(
+            "Entering printCallExpression function",
+            ts.SyntaxKind[node.kind],
+        );
 
         const expression = node.expression;
         const parsedArgs = this.printArgsForCallExpression(node, 0); // Arguments string without outer indent
 
+        // --- Revised `extractLeadingComment` (Keep as is) ---
+        const extractLeadingComment = (text: string): { comment: string; code: string } => {
+            const lines = text.split('\n');
+            const commentLines: string[] = [];
+            let firstCodeLineIndex = -1; // Index of the first non-comment/non-empty line
+
+            for (let i = 0; i < lines.length; i++) {
+                const trimmedLine = lines[i].trim();
+                if (trimmedLine.startsWith('#')) {
+                     // Always capture comment lines if code hasn't been found yet
+                    if (firstCodeLineIndex === -1) {
+                        commentLines.push(lines[i]);
+                    } else {
+                        break; // Found code earlier, stop processing comments
+                    }
+                } else if (trimmedLine === '') {
+                    // Capture blank lines *only* if we haven't hit code yet
+                    if (firstCodeLineIndex === -1) {
+                        commentLines.push(lines[i]);
+                    } else {
+                          break; // Found code, stop collecting comments
+                    }
+                } else {
+                    // Found the first non-comment/non-empty line
+                    if (firstCodeLineIndex === -1) {
+                         firstCodeLineIndex = i;
+                    }
+                     // Continue loop to process all lines, but stop capturing comments
+                     // Break only if it's a comment/blank line *after* code was found
+                }
+            }
+
+            if (firstCodeLineIndex === -1) {
+                firstCodeLineIndex = lines.length;
+            }
+
+            const comment = commentLines.join('\n');
+            const code = lines.slice(firstCodeLineIndex).join('\n');
+
+            // Return untrimmed comment, trimmed code start
+            return { comment: comment.trimEnd(), code: code.trimStart() }; // Trim comment end, code start
+        };
+
+
         // Check what is being called (the expression part of the CallExpression)
         if (ts.isPropertyAccessExpression(expression)) {
-            const propertyAccessExpression = expression; // Renamed for clarity
-            const baseExpression = propertyAccessExpression.expression; // e.g., 'super', 'this', 'obj', 'Array'
-            const memberNameNode = propertyAccessExpression.name; // e.g., 'describe', 'deepExtend', 'push', 'isArray'
+            const propertyAccessExpression = expression;
+            const baseExpression = propertyAccessExpression.expression;
+            const memberNameNode = propertyAccessExpression.name;
 
             // --- Specific Property Access Call Types ---
-
-            // 1. super.method(...)
+            // ... (Cases 1, 2, 3, 4 remain largely the same, they don't usually involve comments needing separation in this way) ...
+             // 1. super.method(...)
             if (baseExpression.kind === ts.SyntaxKind.SuperKeyword) {
                 const methodName = this.printNode(memberNameNode, 0);
-                // When calling a superclass instance method in Julia via `self.parent.method`,
-                // the first argument passed *to that method* should be the current instance `self`.
                 const juliaArgs = parsedArgs ? "self, " + parsedArgs : "self";
-                // Result: `self.parent.method_name(self, args...)`
-                return `self.parent.${methodName}(${juliaArgs})`;
+                return `self.parent.${methodName}(${juliaArgs})`; // No comment handling needed here usually
             }
 
             // 2. this.method(...)
             if (baseExpression.kind === ts.SyntaxKind.ThisKeyword) {
-                 // We directly call the method associated with 'self'
-                 const methodName = this.printNode(memberNameNode, 0); // Prints 'methodName' (potentially uncamelcased)
-                 // Instance methods in Julia defined as `function methodName(self::ClassName, ...)`
-                 // are called like `self.methodName(self, ...)`.
-                 const juliaArgs = parsedArgs ? "self, " + parsedArgs : "self";
-                 // Result: `self.method_name(self, args...)`
-                 return `self.${methodName}(${juliaArgs})`;
+                const methodName = this.printNode(memberNameNode, 0);
+                const juliaArgs = parsedArgs ? "self, " + parsedArgs : "self";
+                return `self.${methodName}(${juliaArgs})`; // No comment handling needed here usually
             }
 
             // 3. Full Property Access Replacements (e.g., Built-ins like console.log, JSON.stringify)
-            // Check the full text of the property access against replacements
             const expressionTextFull = expression.getText().trim();
-            if (this.FullPropertyAccessReplacements.hasOwnProperty(expressionTextFull)) {
-                 // These replacements expect args in standard parentheses, without prepending 'self'
-                 return `${this.FullPropertyAccessReplacements[expressionTextFull]}(${parsedArgs})`;
+            if (
+                this.FullPropertyAccessReplacements.hasOwnProperty(
+                    expressionTextFull,
+                )
+            ) {
+                // No comment handling needed here usually
+                return `${this.FullPropertyAccessReplacements[expressionTextFull]}(${parsedArgs})`;
             }
 
-            // 4. Specific Built-in Method Calls (Handle common patterns that don't fit simple replacements)
-            // Check base first for common built-in objects like Array, Object, Math, JSON, Promise, Number, Date
-            if (ts.isIdentifier(baseExpression)) {
+            // 4. Specific Built-in Method Calls (Array, Object, Math, JSON, Promise, Number, Date)
+             if (ts.isIdentifier(baseExpression)) {
                  const baseName = baseExpression.text;
                  const memberName = memberNameNode.text;
-                 const args = node.arguments ?? []; // arguments as array
+                 const args = node.arguments ?? [];
 
-                // Cases with 1 argument
-                if (args.length === 1) {
-                    const parsedArg = this.printNode(args[0], 0);
-                     // Check against the *member name* (parse, stringify, isArray, keys, values, round, floor, ceil, isInteger)
-                    switch (memberName) { // Check memberName here
-                        case "parse": // e.g. JSON.parse
-                            if (baseName === 'JSON') return this.printJsonParseCall(node, identation, parsedArg);
-                            break;
-                        case "stringify": // e.g. JSON.stringify
-                             if (baseName === 'JSON') return this.printJsonStringifyCall(node, identation, parsedArg);
-                            break;
-                         case "isArray": // e.g. Array.isArray
-                             if (baseName === 'Array') return this.printArrayIsArrayCall(node, identation, parsedArg);
-                             break;
-                         case "keys": // e.g. Object.keys
-                             if (baseName === 'Object') return this.printObjectKeysCall(node, identation, parsedArg);
-                             break;
-                        case "values": // e.g. Object.values
-                             if (baseName === 'Object') return this.printObjectValuesCall(node, identation, parsedArg);
-                             break;
-                         case "all": // e.g. Promise.all
-                             if (baseName === 'Promise') return this.printPromiseAllCall(node, identation, parsedArg);
-                             break;
-                         case "round": if (baseName === 'Math') return this.printMathRoundCall(node, identation, parsedArg); break;
-                         case "floor": if (baseName === 'Math') return this.printMathFloorCall(node, identation, parsedArg); break;
-                         case "ceil":  if (baseName === 'Math') return this.printMathCeilCall(node, identation, parsedArg); break;
-                         case "isInteger": if (baseName === 'Number') return this.printNumberIsIntegerCall(node, identation, parsedArg); break;
-                         // Add other 1-arg built-ins potentially associated with a base object
-                    }
-                }
-                // Cases with 0 arguments
-                 else if (args.length === 0) {
+                 if (args.length === 1) {
+                     const parsedArg = this.printNode(args[0], 0);
                      switch (memberName) {
-                         case "now": // e.g. Date.now
-                            if (baseName === 'Date') return this.printDateNowCall(node, identation);
-                            break;
-                         // Add other 0-arg built-ins potentially associated with a base object
+                         case "parse":
+                             if (baseName === "JSON") return this.printJsonParseCall(node, 0, parsedArg); // Use 0 indent internally
+                             break;
+                         case "stringify":
+                             if (baseName === "JSON") return this.printJsonStringifyCall(node, 0, parsedArg);
+                             break;
+                         case "isArray":
+                             if (baseName === "Array") return this.printArrayIsArrayCall(node, 0, parsedArg);
+                              break;
+                         case "keys":
+                             if (baseName === "Object") return this.printObjectKeysCall(node, 0, parsedArg);
+                             break;
+                         case "values":
+                             if (baseName === "Object") return this.printObjectValuesCall(node, 0, parsedArg);
+                             break;
+                         case "all":
+                              if (baseName === "Promise") return this.printPromiseAllCall(node, 0, parsedArg);
+                              break;
+                         case "round":
+                             if (baseName === "Math") return this.printMathRoundCall(node, 0, parsedArg);
+                             break;
+                         case "floor":
+                              if (baseName === "Math") return this.printMathFloorCall(node, 0, parsedArg);
+                              break;
+                         case "ceil":
+                             if (baseName === "Math") return this.printMathCeilCall(node, 0, parsedArg);
+                              break;
+                         case "isInteger":
+                              if (baseName === "Number") return this.printNumberIsIntegerCall(node, 0, parsedArg);
+                              break;
+                     }
+                 } else if (args.length === 0) {
+                     switch (memberName) {
+                         case "now":
+                              if (baseName === "Date") return this.printDateNowCall(node, 0);
+                              break;
+                     }
+                 }
+             }
+
+
+            // ---- Start Handling Instance Method Calls (Revised comment handling) ----
+            const memberName = memberNameNode.text;
+            const parsedBaseWithComments = this.printNode(baseExpression, 0); // Get base WITH potential comments, use 0 indent internally
+            const { comment: leadingComment, code: commentFreeBase } = extractLeadingComment(parsedBaseWithComments);
+
+            const args = node.arguments ?? [];
+
+            let juliaCallResult = ""; // Variable to store the result from the specific print*Call
+
+            // Handle methods with at least one argument
+            if (args.length > 0) {
+                const parsedArg1 = this.printNode(args[0], 0).trimStart();
+                const parsedArg2 =
+                    args.length > 1
+                        ? this.printNode(args[1], 0).trimStart()
+                        : undefined;
+                switch (memberName) {
+                    case "push":
+                        juliaCallResult = this.printArrayPushCall(node, 0, commentFreeBase, parsedArg1); // Pass 0 indent
+                        break;
+                    case "includes":
+                        juliaCallResult = this.printIncludesCall(node, 0, commentFreeBase, parsedArg1);
+                        break;
+                    case "indexOf":
+                         juliaCallResult = this.printIndexOfCall(node, 0, commentFreeBase, parsedArg1);
+                         break;
+                    case "join":
+                         juliaCallResult = this.printJoinCall(node, 0, commentFreeBase, parsedArg1);
+                         break;
+                    case "split":
+                         juliaCallResult = this.printSplitCall(node, 0, commentFreeBase, parsedArg1);
+                         break;
+                    case "toFixed":
+                         juliaCallResult = this.printToFixedCall(node, 0, commentFreeBase, parsedArg1);
+                         break;
+                    case "concat": {
+                        const allParsedConcatArgs = node.arguments.map((arg) => this.printNode(arg, 0)).join(", ");
+                        juliaCallResult = this.printConcatCall(node, 0, commentFreeBase, allParsedConcatArgs);
+                        break;
+                    }
+                    case "search":
+                         juliaCallResult = this.printSearchCall(node, 0, commentFreeBase, parsedArg1);
+                         break;
+                    case "endsWith":
+                         juliaCallResult = this.printEndsWithCall(node, 0, commentFreeBase, parsedArg1);
+                         break;
+                    case "startsWith":
+                         juliaCallResult = this.printStartsWithCall(node, 0, commentFreeBase, parsedArg1);
+                         break;
+                     case "padEnd":
+                          juliaCallResult = this.printPadEndCall(node, 0, commentFreeBase, parsedArg1, parsedArg2);
+                          break;
+                     case "padStart":
+                          juliaCallResult = this.printPadStartCall(node, 0, commentFreeBase, parsedArg1, parsedArg2);
+                          break;
+                    // Add other 1/2+ arg methods here...
+                }
+                 // Handle methods with at least two arguments (that weren't handled above)
+                if (!juliaCallResult && args.length >= 2) { // Check if not already handled
+                     // Re-parse args just in case they were needed differently
+                     const parsedArg1_2 = this.printNode(args[0], 0).trimStart();
+                     const parsedArg2_2 = this.printNode(args[1], 0).trimStart();
+                     switch (memberName) {
+                         case "slice":
+                             juliaCallResult = this.printSliceCall(node, 0, commentFreeBase, parsedArg1_2, parsedArg2_2);
+                             break;
+                         case "replace":
+                             juliaCallResult = this.printReplaceCall(node, 0, commentFreeBase, parsedArg1_2, parsedArg2_2);
+                             break;
+                          case "replaceAll":
+                              juliaCallResult = this.printReplaceAllCall(node, 0, commentFreeBase, parsedArg1_2, parsedArg2_2);
+                              break;
                      }
                  }
             }
-
-             // Check member name for specific methods that might be called on instances like strings or arrays.
-             // These also map to functions where the instance is the first argument (in Julia's generated code).
-             const memberName = memberNameNode.text;
-             const parsedBase = this.printNode(baseExpression, identation); // The expression before the dot
-             const args = node.arguments ?? []; // arguments as array
-             // Handle specific member calls like push, includes, indexOf, string methods, etc.
-             // These need the *instance* (parsedBase) as the first argument in the Julia function call.
-             // The Julia call syntax is `functionName(instance, args...)`.
-
-             // Handle methods with at least one argument
-             if (args.length > 0) {
-                 const parsedArg1 = this.printNode(args[0], 0).trimStart();
-                 const parsedArg2 = args.length > 1 ? this.printNode(args[1], 0).trimStart() : undefined;
-                 // Check memberName against specific method names.
-                 switch (memberName) {
-                     case 'push': return this.printArrayPushCall(node, identation, parsedBase, parsedArg1);
-                     case 'includes': return this.printIncludesCall(node, identation, parsedBase, parsedArg1);
-                     case 'indexOf': return this.printIndexOfCall(node, identation, parsedBase, parsedArg1);
-                     case 'join': return this.printJoinCall(node, identation, parsedBase, parsedArg1);
-                     case 'split': return this.printSplitCall(node, identation, parsedBase, parsedArg1);
-                     case 'toFixed': return this.printToFixedCall(node, identation, parsedBase, parsedArg1);
-                     case 'concat':
-                        // concat might have more than one arg. Need to print all args for concat call.
-                         const allParsedConcatArgs = node.arguments.map(arg => this.printNode(arg, 0)).join(', ');
-                        return this.printConcatCall(node, identation, parsedBase, allParsedConcatArgs); // Pass all args for concat function
-                     case 'search': return this.printSearchCall(node, identation, parsedBase, parsedArg1);
-                     case 'endsWith': return this.printEndsWithCall(node, identation, parsedBase, parsedArg1);
-                     case 'startsWith': return this.printStartsWithCall(node, identation, parsedBase, parsedArg1);
-                     case 'padEnd': return this.printPadEndCall(node, identation, parsedBase, parsedArg1, parsedArg2);
-                     case 'padStart': return this.printPadStartCall(node, identation, parsedBase, parsedArg1, parsedArg2);
-                 }
-                 // Handle methods with at least two arguments
-                 if (args.length >= 2) {
-                     const parsedArg1 = this.printNode(args[0], 0).trimStart();
-                     const parsedArg2 = this.printNode(args[1], 0).trimStart();
-                      switch (memberName) {
-                        case 'slice': return this.printSliceCall(node, identation, parsedBase, parsedArg1, parsedArg2);
-                        case 'replace': return this.printReplaceCall(node, identation, parsedBase, parsedArg1, parsedArg2); // replace(s, old, new) -> replace(s, old => new) ? Maybe needs custom
-                        case 'replaceAll': return this.printReplaceAllCall(node, identation, parsedBase, parsedArg1, parsedArg2);
-                      }
-                 }
-             }
-             // Handle specific member calls with 0 arguments
-             else if (args.length === 0) {
-                  switch (memberName) {
-                    case 'toString': return this.printToStringCall(node, identation, parsedBase);
-                    case 'toUpperCase': return this.printToUpperCaseCall(node, identation, parsedBase);
-                    case 'toLowerCase': return this.printToLowerCaseCall(node, identation, parsedBase);
-                    case 'shift': return this.printShiftCall(node, identation, parsedBase);
-                    case 'pop': return this.printPopCall(node, identation, parsedBase);
-                    case 'reverse': return this.printReverseCall(node, identation, parsedBase);
-                    case 'trim': return this.printTrimCall(node, identation, parsedBase);
+            // Handle specific member calls with 0 arguments
+            else if (!juliaCallResult && args.length === 0) { // Check if not already handled
+                switch (memberName) {
+                    case "toString":
+                        juliaCallResult = this.printToStringCall(node, 0, commentFreeBase);
+                        break;
+                     case "toUpperCase":
+                         juliaCallResult = this.printToUpperCaseCall(node, 0, commentFreeBase);
+                         break;
+                     case "toLowerCase":
+                         juliaCallResult = this.printToLowerCaseCall(node, 0, commentFreeBase);
+                          break;
+                     case "shift":
+                         juliaCallResult = this.printShiftCall(node, 0, commentFreeBase);
+                          break;
+                     case "pop":
+                         juliaCallResult = this.printPopCall(node, 0, commentFreeBase);
+                         break;
+                      case "reverse":
+                          juliaCallResult = this.printReverseCall(node, 0, commentFreeBase);
+                           break;
+                      case "trim":
+                          juliaCallResult = this.printTrimCall(node, 0, commentFreeBase);
+                          break;
                     // Add other 0-arg member methods
-                  }
-             }
+                }
+            }
 
-            // 5. Other Instance Method Calls (e.g., `myObject.myMethod(...)`)
-            // If not caught by specific built-ins or `this`/`super`
-             // Get the printed base expression (the instance object/variable) and the method name
-             const instanceName = this.printNode(baseExpression, 0);
-             const methodName = this.printNode(memberNameNode, 0); // Already includes uncamelcase if needed
-             // For calls to methods defined on the Julia struct: function methodName(self::ClassName, args...)
-             // The Julia source code calls them explicitly as instance.methodName(instance, args...)
-             // The auto-generated methods from TS also follow this pattern, expecting self as the first arg.
-             const juliaInstanceMethodArgs = instanceName + (parsedArgs ? ", " + parsedArgs : "");
-             return `${instanceName}.${methodName}(${juliaInstanceMethodArgs})`;
+            // If a specific print*Call handled it, combine comment and code
+            if (juliaCallResult) {
+                let indent = this.getIndentationRegex(leadingComment)
+                juliaCallResult = indent + this.getIden(identation) + juliaCallResult;
+                // Combine comment and code. The caller (e.g., printExpressionStatement) adds the final indent.
+                 if (leadingComment.trim()) {
+                      return leadingComment.trimEnd() + '\n' + juliaCallResult; // Add newline if comment exists
+                 } else {
+                      return juliaCallResult; // No comment, just return the code
+                 }
+            }
+
+            // 5. Other Instance Method Calls (Fallback)
+            const instanceName = commentFreeBase; // Use comment-free base
+            const methodName = this.printNode(memberNameNode, 0); // Already includes uncamelcase if needed
+            const juliaInstanceMethodArgs = instanceName + (parsedArgs ? ", " + parsedArgs : "");
+            juliaCallResult = `${instanceName}.${methodName}(${juliaInstanceMethodArgs})`;
+            // Combine comment and code for the fallback case as well
+             if (leadingComment.trim()) {
+                  return leadingComment.trimEnd() + '\n' + juliaCallResult;
+             } else {
+                  return juliaCallResult;
+             }
 
 
         } else if (ts.isIdentifier(expression)) {
-             // --- Direct Identifier Calls (e.g., `myFunction(...)`, `parseInt(...)`) ---
-            const functionName = expression.text ?? (expression.escapedText as string); // Explicitly cast escapedText to string
-
-            // 1. Replacements for direct calls (e.g., parseInt, parseFloat)
-             if (this.CallExpressionReplacements.hasOwnProperty(functionName as string)) { // Cast for hasOwnProperty index
-                 let replacement = this.CallExpressionReplacements[functionName as string]; // Cast for index access
-                  // Handle replacements that include opening parenthesis, adding args and closing paren
-                 if (replacement.endsWith('(') || replacement.endsWith(', ')) {
-                     return `${replacement}${parsedArgs})`;
-                 } else {
-                    // Standard function call syntax
+             // --- Direct Identifier Calls (No change needed for comment handling here) ---
+             // ... (existing code for identifier calls) ...
+            const functionName = expression.text ?? (expression.escapedText as string);
+            if (this.CallExpressionReplacements.hasOwnProperty(functionName as string)) {
+                let replacement = this.CallExpressionReplacements[functionName as string];
+                if (replacement.endsWith("(") || replacement.endsWith(", ")) {
+                    return `${replacement}${parsedArgs})`;
+                } else {
                     return `${replacement}(${parsedArgs})`;
-                 }
-             }
-
-            // 2. Specific global calls (e.g., assert)
-             if (functionName === "assert") {
-                // printAssertCall formats the arguments correctly for @assert
-                return this.printAssertCall(node, identation, parsedArgs);
-             }
-
-            // 3. Other direct function calls
-             const transformedFunctionName = this.transformCallExpressionName(this.unCamelCaseIfNeeded(functionName as string)); // Cast for unCamelCaseIfNeeded
-            return `${transformedFunctionName}(${parsedArgs})`;
+                }
+            }
+            if (functionName === "assert") {
+                return this.printAssertCall(node, 0, parsedArgs); // Use 0 indent
+            }
+             const transformedFunctionName = this.transformCallExpressionName(this.unCamelCaseIfNeeded(functionName as string));
+             return `${transformedFunctionName}(${parsedArgs})`;
 
         } else if (expression.kind === ts.SyntaxKind.SuperKeyword) {
-             // --- Standalone super() Call ---
-            // This corresponds to the JavaScript `super()` call in a constructor to call the super constructor.
-            // In Julia, the super constructor is called implicitly/explicitly via the `parent = ClassName(...)` line
-            // in the generated child struct's constructor. A direct CallExpression with SuperKeyword
-            // should not typically print anything on its own line in the Julia output.
-            // The test case is explicitly `super.describe()`, which is handled by the PropertyAccessExpression block above.
-            // If a standalone `super()` appears outside a constructor, it's likely an error or needs special context handling not currently supported.
-            // Return empty for now.
-            return ""; // Return empty string for standalone `super()` call
+            // --- Standalone super() Call (No change needed) ---
+            return "";
         }
 
-        // --- Fallback for Unhandled Call Expression Types ---
-         console.warn( // Keep console.warn
+        // --- Fallback for Unhandled Call Expression Types (No change needed) ---
+        console.warn(
             `[${this.id}] Unhandled CallExpression expression kind:`,
             ts.SyntaxKind[expression.kind],
-             "Text:", expression.getText()?.substring(0, 100)
+            "Text:",
+            expression.getText()?.substring(0, 100),
         );
-        // Fallback to generic parsing, might result in incorrect Julia syntax
-        let parsedExpression = this.printNode(expression, 0);
-        // Check if the parsed expression already includes parentheses
-        if (parsedExpression.endsWith(')') || parsedExpression.trimRight().endsWith(')')) {
-             // Assume it's a complex expression that already includes its call syntax
+        let parsedExpression = this.printNode(expression, 0); // Use 0 indent
+        if (parsedExpression.endsWith(")") || parsedExpression.trimRight().endsWith(")")) {
              return parsedExpression;
         }
-        // Otherwise, add standard function call parentheses with args
         return `${parsedExpression}(${parsedArgs})`;
     }
 
@@ -1732,7 +1862,8 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         node.members.forEach((member) => {
             // Process *all* PropertyDeclarations for fields
-            if (ts.isPropertyDeclaration(member)) { // Removed isStaticMember check
+            if (ts.isPropertyDeclaration(member)) {
+                // Removed isStaticMember check
                 if (ts.isIdentifier(member.name)) {
                     const propertyName = member.name.text;
                     let type = "";
@@ -1780,7 +1911,12 @@ export class JuliaTranspiler extends BaseTranspiler {
 
                     propertiesString += `${this.getIden(identation + 1)}${propertyName}${type}${defaultValue}\n`;
                 }
-            } else if (ts.isMethodDeclaration(member) && !ts.isConstructorDeclaration(member) && !this.isStaticMember(member)) { // Only add method signatures if they are instance methods
+            } else if (
+                ts.isMethodDeclaration(member) &&
+                !ts.isConstructorDeclaration(member) &&
+                !this.isStaticMember(member)
+            ) {
+                // Only add method signatures if they are instance methods
                 if (ts.isIdentifier(member.name)) {
                     const methodName = member.name.text;
                     // Add method as a Function field with a default value pointing to the function itself
@@ -1801,7 +1937,12 @@ export class JuliaTranspiler extends BaseTranspiler {
             }
             // Check if there are any properties or instance methods defined
             // *** FIX: Use this.isStaticMember ***
-            if (ts.isPropertyDeclaration(member) || (ts.isMethodDeclaration(member) && !this.isStaticMember(member) && !ts.isConstructorDeclaration(member)) ) {
+            if (
+                ts.isPropertyDeclaration(member) ||
+                (ts.isMethodDeclaration(member) &&
+                    !this.isStaticMember(member) &&
+                    !ts.isConstructorDeclaration(member))
+            ) {
                 propertyOrMethodExists = true;
             }
         });
@@ -2226,15 +2367,22 @@ export class JuliaTranspiler extends BaseTranspiler {
         return `join(${name}, ${parsedArg})`;
     }
 
-    printConcatCall(node: ts.CallExpression, identation: any, name?: any, parsedArg?: any) {
+    printConcatCall(
+        node: ts.CallExpression,
+        identation: any,
+        name?: any,
+        parsedArg?: any,
+    ) {
         // Directly translate .concat() to Julia's concat() function for now.
         // This might need refinement if vcat or string concatenation is strictly required based on types.
-        const args = node.arguments.map(arg => this.printNode(arg, 0)).join(', ');
+        const args = node.arguments
+            .map((arg) => this.printNode(arg, 0))
+            .join(", ");
         return `concat(${name}, ${args})`; // Use concat directly
     }
 
     printArrayPushCall(node, identation, name, parsedArg) {
-        return this.getIden(identation) + `push!(${name}, ${parsedArg})`;
+        return `push!(${name}, ${parsedArg})`;
     }
 
     printSplitCall(node: any, identation: any, name?: any, parsedArg?: any) {
@@ -2520,7 +2668,11 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
 
         // JSDoc handling (remains the same)
-        if (this.withinFunctionDeclaration && this.nodeContainsJsDoc(node) && !this.doComments) {
+        if (
+            this.withinFunctionDeclaration &&
+            this.nodeContainsJsDoc(node) &&
+            !this.doComments
+        ) {
             this.tmpJSDoc = result; // Store potential docblock
             result = ""; // Clear result so it's not duplicated
         }
@@ -2774,22 +2926,20 @@ export class JuliaTranspiler extends BaseTranspiler {
                 return `${baseIndent}delete!(${objectName}, Symbol(${propertyVar}))`;
             }
         } else if (ts.isPropertyAccessExpression(node.expression)) {
-             // Handle delete myObject.property -> delete!(myObject, :property)
+            // Handle delete myObject.property -> delete!(myObject, :property)
             const objectName = this.printNode(node.expression.expression, 0);
             const propertyName = node.expression.name.text; // Or escapedText
             return `${baseIndent}delete!(${objectName}, :${propertyName})`;
-        }
-
-        else {
+        } else {
             // Fallback or error for unexpected expression types
-            console.warn( // Keep console.warn for actual warnings
+            console.warn(
+                // Keep console.warn for actual warnings
                 "Unhandled delete expression type:",
                 ts.SyntaxKind[node.expression.kind],
             );
             return `${baseIndent}# TODO: Unhandled delete expression: ${this.printNode(node.expression, 0)}`;
         }
     }
-
 
     printSpreadElement(node, identation) {
         const expression = this.printNode(node.expression, 0);
@@ -2825,16 +2975,21 @@ export class JuliaTranspiler extends BaseTranspiler {
         return `@assert ${parsedArgs}`; // Or handle error
     }
 
-    printArrayBindingPattern(node: ts.ArrayBindingPattern, identation: number): string {
+    printArrayBindingPattern(
+        node: ts.ArrayBindingPattern,
+        identation: number,
+    ): string {
         // Indentation is usually handled by the parent VariableStatement/ForStatement etc.
-        const elements = node.elements.map((e) => {
-            if (ts.isBindingElement(e)) {
-                // Recurse for nested patterns or print identifier
-                return this.printNode(e.name, 0);
-            }
-             // Handle OmittedExpressionElement if necessary
-            return '#OMITTED#';
-        }).join(", ");
+        const elements = node.elements
+            .map((e) => {
+                if (ts.isBindingElement(e)) {
+                    // Recurse for nested patterns or print identifier
+                    return this.printNode(e.name, 0);
+                }
+                // Handle OmittedExpressionElement if necessary
+                return "#OMITTED#";
+            })
+            .join(", ");
 
         // Find the VariableDeclaration parent to get the initializer
         let parentDeclaration: ts.VariableDeclaration | undefined = undefined;
@@ -2843,33 +2998,49 @@ export class JuliaTranspiler extends BaseTranspiler {
         } else {
             // This can happen if ArrayBindingPattern is used elsewhere (e.g., function param)
             // In the context of `const [a,b] = ...`, parent *must* be VariableDeclaration.
-            console.error("ArrayBindingPattern parent is not VariableDeclaration - Unexpected context?"); // Keep console.error
+            console.error(
+                "ArrayBindingPattern parent is not VariableDeclaration - Unexpected context?",
+            ); // Keep console.error
             return "#Error: Invalid ArrayBindingPattern context";
         }
 
         const initializer = parentDeclaration.initializer;
-        let rightExpression = '()'; // Default to empty tuple
+        let rightExpression = "()"; // Default to empty tuple
 
         if (initializer) {
             // Print the initializer node
             let printedInitializer = this.printNode(initializer, 0); // e.g., gets "[1, 2]" from ArrayLiteral
-             // Check if the *original* initializer was an ArrayLiteralExpression
-             // AND if the printed result looks like a Julia array `[...]`
-            if (ts.isArrayLiteralExpression(initializer) && printedInitializer.startsWith('[') && printedInitializer.endsWith(']')) {
+            // Check if the *original* initializer was an ArrayLiteralExpression
+            // AND if the printed result looks like a Julia array `[...]`
+            if (
+                ts.isArrayLiteralExpression(initializer) &&
+                printedInitializer.startsWith("[") &&
+                printedInitializer.endsWith("]")
+            ) {
                 // Convert `[el1, el2]` to `(el1, el2)` to match Julia tuple assignment syntax for destructuring
-                 rightExpression = '(' + printedInitializer.substring(1, printedInitializer.length - 1) + ')';
+                rightExpression =
+                    "(" +
+                    printedInitializer.substring(
+                        1,
+                        printedInitializer.length - 1,
+                    ) +
+                    ")";
             } else {
-                 // If initializer wasn't an array literal or didn't print as [...], use its output directly
-                 rightExpression = printedInitializer;
+                // If initializer wasn't an array literal or didn't print as [...], use its output directly
+                rightExpression = printedInitializer;
             }
         }
 
         // Construct the full assignment "lhs = rhs" without a semicolon.
         // The VariableStatement adds the semicolon later.
-        return this.getIden(0) + // No indent needed, parent handles line indent
-               this.LEFT_PARENTHESIS + elements + this.RIGHT_PARENTHESIS +
-               " = " +
-               rightExpression; // NO SEMICOLON HERE
+        return (
+            this.getIden(0) + // No indent needed, parent handles line indent
+            this.LEFT_PARENTHESIS +
+            elements +
+            this.RIGHT_PARENTHESIS +
+            " = " +
+            rightExpression
+        ); // NO SEMICOLON HERE
     }
 
     printPostFixUnaryExpression(node, identation) {
@@ -2938,20 +3109,23 @@ export class JuliaTranspiler extends BaseTranspiler {
         let isArrayIndex = false;
         // Use the improved isArrayType check
         if (this.isArrayType(expressionType)) {
-             isArrayIndex = true;
+            isArrayIndex = true;
         } else {
-             // If expression type is not clearly array, check the argument type
-             const argumentType = global.checker.getTypeAtLocation(argumentExpression);
-             // Check if the argument type flags indicate a number or numeric literal
-             if ((argumentType.flags & ts.TypeFlags.NumberLike) || ts.isNumericLiteral(argumentExpression)) {
-                 // If index is number-like, assume it's for an array unless expression type strongly suggests otherwise (e.g. Dict{Int, Any})
-                 // This heuristic might fail for Dicts with integer keys.
-                 // TODO: Potentially needs smarter type checking for Dict{Int, ...} cases
-                 isArrayIndex = true;
-             }
-             // Otherwise (string literal, string variable, symbol, etc.), assume dictionary key access
+            // If expression type is not clearly array, check the argument type
+            const argumentType =
+                global.checker.getTypeAtLocation(argumentExpression);
+            // Check if the argument type flags indicate a number or numeric literal
+            if (
+                argumentType.flags & ts.TypeFlags.NumberLike ||
+                ts.isNumericLiteral(argumentExpression)
+            ) {
+                // If index is number-like, assume it's for an array unless expression type strongly suggests otherwise (e.g. Dict{Int, Any})
+                // This heuristic might fail for Dicts with integer keys.
+                // TODO: Potentially needs smarter type checking for Dict{Int, ...} cases
+                isArrayIndex = true;
+            }
+            // Otherwise (string literal, string variable, symbol, etc.), assume dictionary key access
         }
-
 
         if (isArrayIndex) {
             // Add '+ 1' for 1-based indexing
@@ -2959,40 +3133,51 @@ export class JuliaTranspiler extends BaseTranspiler {
                 // Handle numeric literal index directly
                 try {
                     const numericValue = parseInt(argumentAsString, 10);
-                    if (!isNaN(numericValue) && Number.isInteger(numericValue)) { // Check if it's a valid integer
+                    if (
+                        !isNaN(numericValue) &&
+                        Number.isInteger(numericValue)
+                    ) {
+                        // Check if it's a valid integer
                         argumentAsString = (numericValue + 1).toString(); // Calculate 1-based index
                     } else {
                         // Fallback for non-integer literals or if parse fails, add 1 dynamically
-                        console.warn("[JuliaTranspiler] Non-integer numeric literal used for array indexing, adding +1 dynamically:", argumentAsString);
+                        console.warn(
+                            "[JuliaTranspiler] Non-integer numeric literal used for array indexing, adding +1 dynamically:",
+                            argumentAsString,
+                        );
                         argumentAsString = `(${argumentAsString}) + 1`; // Wrap original arg if adding
                     }
                 } catch (e) {
-                    console.warn("[JuliaTranspiler] Could not parse numeric literal for indexing, adding +1 dynamically:", argumentAsString);
+                    console.warn(
+                        "[JuliaTranspiler] Could not parse numeric literal for indexing, adding +1 dynamically:",
+                        argumentAsString,
+                    );
                     argumentAsString = `(${argumentAsString}) + 1`; // Wrap original arg if adding
                 }
             } else {
                 // Handle variable or other expression types used as array index
-                 // Just add 1 directly. Julia handles integer arithmetic.
-                 // If indexVar could be float, conversion might be needed, but test expects direct addition.
-                 argumentAsString = `${argumentAsString} + 1`; // Add 1 directly to the variable/expression
+                // Just add 1 directly. Julia handles integer arithmetic.
+                // If indexVar could be float, conversion might be needed, but test expects direct addition.
+                argumentAsString = `${argumentAsString} + 1`; // Add 1 directly to the variable/expression
             }
         } else {
             // Dictionary Key Access
             if (ts.isStringLiteral(argumentExpression)) {
-                 // Convert string literal "key" to :key for dictionary access
-                 argumentAsString = `Symbol("${argumentExpression.text}")`;
+                // Convert string literal "key" to :key for dictionary access
+                argumentAsString = `Symbol("${argumentExpression.text}")`;
             } else {
-                 // Assume argumentExpression holds a variable or expression evaluating to a key
-                 // Convert to Symbol if it's not already one (consistent with delete/creation)
-                 // Check if the variable is likely already a Symbol based on its name convention or type if possible
-                 const argumentType = global.checker.getTypeAtLocation(argumentExpression);
-                 const argumentSymbol = argumentType.getSymbol();
-                 if (argumentSymbol && argumentSymbol.escapedName === 'Symbol') {
+                // Assume argumentExpression holds a variable or expression evaluating to a key
+                // Convert to Symbol if it's not already one (consistent with delete/creation)
+                // Check if the variable is likely already a Symbol based on its name convention or type if possible
+                const argumentType =
+                    global.checker.getTypeAtLocation(argumentExpression);
+                const argumentSymbol = argumentType.getSymbol();
+                if (argumentSymbol && argumentSymbol.escapedName === "Symbol") {
                     // If it's already a symbol, use it directly
-                 } else {
+                } else {
                     // Otherwise, convert to symbol
                     argumentAsString = `Symbol(${argumentAsString})`;
-                 }
+                }
             }
         }
 
@@ -3017,7 +3202,8 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Check if the type is a union type containing an array or tuple
         if (type.isUnion()) {
             for (const unionType of type.types) {
-                if (this.isArrayType(unionType)) { // Recursive call
+                if (this.isArrayType(unionType)) {
+                    // Recursive call
                     return true;
                 }
             }
@@ -3025,12 +3211,12 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // Fallback: Check the symbolic name if available (less reliable)
         const symbol = type.getSymbol();
-        if (symbol && symbol.escapedName === 'Array') {
+        if (symbol && symbol.escapedName === "Array") {
             return true;
         }
 
         // Consider interface names like ReadonlyArray
-        if (symbol && symbol.escapedName === 'ReadonlyArray') {
+        if (symbol && symbol.escapedName === "ReadonlyArray") {
             return true;
         }
 
@@ -3049,10 +3235,12 @@ export class JuliaTranspiler extends BaseTranspiler {
         // Get modifiers string from base, then potentially remove 'async' if asyncTranspiling is true
         let modifiers = super.printModifiers(node);
         if (this.asyncTranspiling && modifiers.includes(this.ASYNC_TOKEN)) {
-             // Remove the async token from the modifiers string
-             modifiers = modifiers.replace(this.ASYNC_TOKEN, "").trim();
+            // Remove the async token from the modifiers string
+            modifiers = modifiers.replace(this.ASYNC_TOKEN, "").trim();
         }
-        const defaultAccess = this.METHOD_DEFAULT_ACCESS ? this.METHOD_DEFAULT_ACCESS + " ": "";
+        const defaultAccess = this.METHOD_DEFAULT_ACCESS
+            ? this.METHOD_DEFAULT_ACCESS + " "
+            : "";
         modifiers = modifiers ? modifiers + " " : defaultAccess; // tmp check this
 
         const parsedArgs = this.printMethodParameters(node);
@@ -3060,8 +3248,15 @@ export class JuliaTranspiler extends BaseTranspiler {
         returnType = returnType ? returnType + " " : returnType;
 
         const methodToken = this.METHOD_TOKEN ? this.METHOD_TOKEN + " " : "";
-        const methodDef = this.getIden(identation) + modifiers + returnType + methodToken + name
-            + "(" + parsedArgs + ")";
+        const methodDef =
+            this.getIden(identation) +
+            modifiers +
+            returnType +
+            methodToken +
+            name +
+            "(" +
+            parsedArgs +
+            ")";
 
         this.doComments = true;
         let result = this.printNodeCommentsIfAny(node, identation, methodDef);
@@ -3070,14 +3265,14 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     removeLeadingEmptyLines(text: string): string {
-      // This regex matches one or more occurrences of:
-      // ^           - Matches the beginning of the string.
-      // [ \t\r\n]   - Matches a space, tab, carriage return, or newline character.
-      // +           - Matches the character class one or more times.
-      // Replace the matched pattern with an empty string.
-      const regex = /^[ \t\r\n]+/;
+        // This regex matches one or more occurrences of:
+        // ^           - Matches the beginning of the string.
+        // [ \t\r\n]   - Matches a space, tab, carriage return, or newline character.
+        // +           - Matches the character class one or more times.
+        // Replace the matched pattern with an empty string.
+        const regex = /^[ \t\r\n]+/;
 
-      return text.replace(regex, '');
+        return text.replace(regex, "");
     }
 
     protected transformIdentifierForReservedKeywords(idValue: string) {
@@ -3093,11 +3288,11 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     transformMethodNameIfNeeded(name: string): string {
-        return this.transformIdentifierAndUnCamelCaseIfNeeded(name)
+        return this.transformIdentifierAndUnCamelCaseIfNeeded(name);
     }
 
     transformFunctionNameIfNeeded(name: any): string {
-        return this.transformIdentifierAndUnCamelCaseIfNeeded(name)
+        return this.transformIdentifierAndUnCamelCaseIfNeeded(name);
     }
 
     transformCallExpressionName(name: string): string {
@@ -3121,14 +3316,14 @@ export class JuliaTranspiler extends BaseTranspiler {
                 if (commentText !== undefined) {
                     const formatted = commentText
                         .split("\n")
-                        .map((line) => line.trim())
-                        .map((line) =>
-                            !line.trim().startsWith("*")
-                                ? this.getIden(identation) + line
-                                : this.getIden(identation) + " " + line,
-                        )
+                        .map((line) => line.trim()) // Trim leading/trailing whitespace from the original line
+                        .map((line) => {
+                            // Add indentation based on the original identation param
+                            // Remove check for '*' as it's handled by transformLeadingComment
+                            return this.getIden(identation) + line;
+                         })
                         .join("\n");
-                    res += this.transformLeadingComment(formatted) + "\n";
+                    res += this.transformLeadingComment(formatted) + "\n"; // Add newline after each transformed comment block
                 }
             }
         }
@@ -3137,6 +3332,8 @@ export class JuliaTranspiler extends BaseTranspiler {
             return "";
         } else {
             this.transpiledComments.add(res_trim);
+            // Return the result without adding extra indentation here
+            // The mapping function inside already added the correct base indentation
             return res;
         }
     }
@@ -3162,5 +3359,18 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // No custom override for other operators or non-undefined comparisons
         return undefined;
+    }
+
+    getIndentationRegex(text: string): string {
+      if (!text) {
+        return ""; // Handle null, undefined, or empty string
+      }
+
+      // Match zero or more spaces or tabs at the beginning (^) of the string
+      const match = text.match(/^[\t ]*/);
+
+      // match will return an array where the first element is the matched string,
+      // or null if no match (though with *, it should always match at least "")
+      return match ? match[0] : "";
     }
 }
