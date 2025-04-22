@@ -714,7 +714,7 @@ end
         expect(output).toBe(julia);
     });
 
-    test.only('convert JS doc to Julia doc', () => {
+    test('convert JS doc to Julia doc', () => {
         const ts =
             `function fetchStatus(params) {
     /**

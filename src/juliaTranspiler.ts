@@ -2240,9 +2240,9 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printTryStatement(node, identation) {
-        const tryBody = this.printBlock(node.tryBlock, identation);
+        const tryBody = this.printBlock(node.tryBlock, identation + 1);
 
-        const catchBody = this.printBlock(node.catchClause.block, identation);
+        const catchBody = this.printBlock(node.catchClause.block, identation + 1);
         const catchDeclaration = this.CATCH_DECLARATION; // + " " + this.printNode(node.catchClause.variableDeclaration.name, 0);
 
         const catchCondOpen = this.CONDITION_OPENING
@@ -3325,7 +3325,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                             return this.getIden(identation) + line;
                          })
                         .join("\n");
-                    res += this.transformLeadingComment(formatted) + "\n"; // Add newline after each transformed comment block
+                    res += this.transformLeadingComment(formatted.trim()) + "\n"; // Add newline after each transformed comment block
                 }
             }
         }
