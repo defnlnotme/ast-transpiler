@@ -1159,7 +1159,12 @@ end;
         const ts =
 `const params = { method, headers, body, timeout: this.timeout };`;
         const julia =
-`params = Dict{Symbol, Any}(pairs((; method, headers, body, timeout = self.timeout)));\n`
+`params = Dict(
+    Symbol("method") => method,
+    Symbol("headers") => headers,
+    Symbol("body") => body,
+    Symbol("timeout") => self.timeout
+);\n`
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });

@@ -722,58 +722,18 @@ export class JuliaTranspiler extends BaseTranspiler {
         return "nothing";
     }
 
-    printObjectLiteralExpression(node, identation) {
+    printObjectLiteralExpression(node: ts.ObjectLiteralExpression, identation: number): string {
+        // Always use the standard Dict(key => value) format
         if (node.properties.length === 0) {
-            return "Dict{Symbol, Any}()";
+            return "Dict{Symbol, Any}()"; // Explicitly type empty Dict
         }
+        // Use identation + 1 for properties *inside* the Dict() call
+        const objectBody = node.properties
+            .map((p) => this.printPropertyAssignment(p, identation + 1)) // Indent properties
+            .join(",\n"); // Join properties with comma and newline
 
-        // Check for the "packing" pattern:
-        // - Uses shorthand properties { name }
-        // - OR assigns non-literal values { key: variable, key2: this.prop }
-        const isPackingPattern = node.properties.some(prop => ts.isShorthandPropertyAssignment(prop));
-        const assignsOnlyNonLiterals = node.properties.every(prop => {
-            if (ts.isShorthandPropertyAssignment(prop)) return true;
-            if (ts.isPropertyAssignment(prop) && prop.initializer) {
-                // Check if initializer is NOT a literal type
-                return !ts.isStringLiteral(prop.initializer) &&
-                       !ts.isNumericLiteral(prop.initializer) &&
-                       !(prop.initializer.kind === ts.SyntaxKind.TrueKeyword) && // isBooleanLiteral is internal
-                       !(prop.initializer.kind === ts.SyntaxKind.FalseKeyword) &&
-                       !ts.isArrayLiteralExpression(prop.initializer) &&
-                       !ts.isObjectLiteralExpression(prop.initializer) &&
-                       !(prop.initializer.kind === ts.SyntaxKind.NullKeyword) &&
-                       !(prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword);
-            }
-            return false; // Ignore other property types for this check
-        });
-
-        // Use Dict(pairs((; ... ))) ONLY for the packing pattern
-        if (isPackingPattern || assignsOnlyNonLiterals) {
-             const pairsArgs = node.properties.map(prop => {
-                 if (ts.isShorthandPropertyAssignment(prop)) {
-                     // Shorthand: { method } -> method
-                     return this.printNode(prop.name, 0);
-                 } else if (ts.isPropertyAssignment(prop)) {
-                     // Regular: { timeout: this.timeout } -> timeout = self.timeout
-                     // Ensure the key is printed as a simple identifier if possible
-                     const key = ts.isIdentifier(prop.name) ? prop.name.text : this.printNode(prop.name, 0);
-                     const value = this.printNode(prop.initializer, 0);
-                     return `${key} = ${value}`;
-                 } else {
-                      console.warn(`[JuliaTranspiler] Unexpected property kind in object literal for packing: ${ts.SyntaxKind[prop.kind]}`);
-                      return `#UNHANDLED_PROP#`;
-                 }
-             }).join(', ');
-             return `Dict{Symbol, Any}(pairs((; ${pairsArgs})))`;
-        } else {
-             // Fallback to standard Dict(Symbol("key") => value, ...) creation
-             const objectBody = node.properties
-                 .map((p) => this.printPropertyAssignment(p, identation + 1)) // Indent properties
-                 .join(",\n"); // Join properties with comma and newline
-
-             // Structure: Dict(\n <indented properties> \n <base indent>)
-             return `Dict(\n${objectBody}\n${this.getIden(identation)})`;
-        }
+        // Structure: Dict(\n <indented properties> \n <base indent>)
+        return `Dict(\n${objectBody}\n${this.getIden(identation)})`;
     }
 
     printReturnStatementWithoutIndent(node) {
@@ -1363,57 +1323,78 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printPropertyAssignment(node, identation) {
-        const { name, initializer } = node;
-        let nameKey: string;
+        // Check if it's a ShorthandPropertyAssignment first
+        if (ts.isShorthandPropertyAssignment(node)) {
+            const name = node.name.text; // Or escapedText
+            const symbolKey = `Symbol("${this.transformIdentifierForReservedKeywords(name)}")`;
+            const value = this.transformIdentifierForReservedKeywords(name); // Use the same name for the value
 
-        // Determine the key format: :key for identifiers/string literals, Symbol("...") for complex/variables
-        if (ts.isIdentifier(name)) {
-            nameKey = `Symbol("${name.text}")`; // Preferred: :identifier
-        } else if (ts.isStringLiteral(name)) {
-            // Remove outer quotes from the literal's text content for the symbol
-            nameKey = `Symbol("${name.text}")`; // Preferred: :stringliteral
-        } else {
-            // Fallback for computed property names or other complex cases
-            const nameAsString = this.printNode(name, 0);
-            // Use Symbol constructor if the name isn't a simple identifier/string
-            nameKey = `Symbol(${nameAsString})`;
-            // Potentially unsafe if nameAsString evaluates to something unexpected.
-            // Consider if this case needs more robust handling.
-            console.warn(
-                `[JuliaTranspiler] Complex property name used as Dict key: ${nameAsString}. Generating Symbol(${nameAsString}). Review if this is intended.`,
+            let trailingComment = this.printTraillingComment(node, identation);
+            trailingComment = trailingComment ? " " + trailingComment : "";
+
+            return this.getIden(identation) + symbolKey + " => " + value + trailingComment;
+        }
+
+        // Original logic for PropertyAssignment
+        if (ts.isPropertyAssignment(node)) {
+            const { name, initializer } = node;
+            let nameKey: string;
+
+             // Determine the key format: :key for identifiers, Symbol("...") for complex/string literals
+             if (ts.isIdentifier(name)) {
+                 // Handle potential reserved keywords for the symbol literal
+                 const identifierName = this.transformIdentifierForReservedKeywords(name.text);
+                  nameKey = `Symbol("${identifierName}")`; // Use Symbol("key") format
+             } else if (ts.isStringLiteral(name)) {
+                 // String literals become Symbol("string literal content")
+                 nameKey = `Symbol("${name.text}")`;
+             } else {
+                 // Fallback for computed property names or other complex cases
+                 const nameAsString = this.printNode(name, 0);
+                 // Use Symbol constructor if the name isn't a simple identifier/string
+                 nameKey = `Symbol(${nameAsString})`;
+                 console.warn( // Keep console.warn
+                     `[JuliaTranspiler] Complex property name used as Dict key: ${nameAsString}. Generating Symbol(${nameAsString}). Review if this is intended.`,
+                 );
+             }
+
+            // Handle initializer safely
+            const customRightSide = this.printCustomRightSidePropertyAssignment(
+                initializer, // initializer might be undefined here if called incorrectly, but guarded by isPropertyAssignment
+                identation, // Pass identation for nested structures
+            );
+
+            // Use identation = 0 for printing the value expression itself
+            // Ensure initializer is passed to printNode only if it exists
+            const valueAsString = customRightSide
+                ? customRightSide
+                : initializer ? this.printNode(initializer, 0) : 'nothing'; // Default to 'nothing' if initializer is missing
+
+            let trailingComment = this.printTraillingComment(node, identation); // Use outer identation for comment positioning
+            trailingComment = trailingComment ? " " + trailingComment : ""; // Add leading space if comment exists
+
+            const propOpen = this.PROPERTY_ASSIGNMENT_OPEN
+                ? this.PROPERTY_ASSIGNMENT_OPEN + " "
+                : "";
+            const propClose = this.PROPERTY_ASSIGNMENT_CLOSE
+                ? " " + this.PROPERTY_ASSIGNMENT_CLOSE
+                : "";
+
+            // Apply indentation to the whole line
+            return (
+                this.getIden(identation) +
+                propOpen +
+                nameKey + // Use the formatted Symbol key
+                " => " +
+                valueAsString.trim() + // Value itself shouldn't have outer indent
+                propClose +
+                trailingComment
             );
         }
 
-        const customRightSide = this.printCustomRightSidePropertyAssignment(
-            initializer,
-            identation, // Pass identation for nested structures
-        );
-
-        // Use identation = 0 for printing the value expression itself
-        const valueAsString = customRightSide
-            ? customRightSide
-            : this.printNode(initializer, 0);
-
-        let trailingComment = this.printTraillingComment(node, identation); // Use outer identation for comment positioning
-        trailingComment = trailingComment ? " " + trailingComment : ""; // Add leading space if comment exists
-
-        const propOpen = this.PROPERTY_ASSIGNMENT_OPEN
-            ? this.PROPERTY_ASSIGNMENT_OPEN + " "
-            : "";
-        const propClose = this.PROPERTY_ASSIGNMENT_CLOSE
-            ? " " + this.PROPERTY_ASSIGNMENT_CLOSE
-            : "";
-
-        // Apply indentation to the whole line
-        return (
-            this.getIden(identation) +
-            propOpen +
-            nameKey + // Use the formatted Symbol key
-            " => " +
-            valueAsString.trim() + // Value itself shouldn't have outer indent
-            propClose +
-            trailingComment
-        );
+        // Fallback for other property types (like MethodDeclaration in object literals, though less common)
+        console.warn(`[JuliaTranspiler] Unhandled property type in object literal: ${ts.SyntaxKind[node.kind]}`);
+        return this.getIden(identation) + `# TODO: Unhandled property: ${node.getText()}`;
     }
 
     printCustomRightSidePropertyAssignment(node, identation): string {
