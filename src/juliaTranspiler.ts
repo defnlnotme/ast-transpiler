@@ -1250,7 +1250,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 // ... other specific node types ...
                 else {
                     // Fallback for unhandled nodes
-                    if (!(SyntaxKind[node.kind] in IGNORED_NODES)) {
+                    if (!IGNORED_NODES.has(node.kind)) {
                         console.warn(
                             // Keep console.warn for actual warnings
                             `[${this.id}] Unhandled node kind:`,
