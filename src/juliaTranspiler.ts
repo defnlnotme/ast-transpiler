@@ -1790,12 +1790,14 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
 
         // --- Fallback for Unhandled Call Expression Types (No change needed) ---
-        console.warn(
-            `[${this.id}] Unhandled CallExpression expression kind:`,
-            ts.SyntaxKind[expression.kind],
-            "Text:",
-            expression.getText()?.substring(0, 100),
-        );
+        if (!IGNORED_NODES.has(expression.kind)) {
+            console.warn(
+                `[${this.id}] Unhandled CallExpression expression kind:`,
+                ts.SyntaxKind[expression.kind],
+                "Text:",
+                expression.getText()?.substring(0, 100),
+            );
+        }
         let parsedExpression = this.printNode(expression, 0); // Use 0 indent
         if (parsedExpression.endsWith(")") || parsedExpression.trimRight().endsWith(")")) {
              return parsedExpression;
