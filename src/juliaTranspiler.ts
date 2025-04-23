@@ -22,6 +22,7 @@ const conditionalDebugLog = (...args: any[]) => {
 // --- End Conditional Debug Logging ---
 
 const SyntaxKind = ts.SyntaxKind;
+const IGNORED_NODES = new Set<ts.SyntaxKind>([SyntaxKind.ImportDeclaration]);
 
 const parserConfig = {
     STATIC_TOKEN: "", // to do static decorator
@@ -1249,13 +1250,15 @@ export class JuliaTranspiler extends BaseTranspiler {
                 // ... other specific node types ...
                 else {
                     // Fallback for unhandled nodes
-                    console.warn(
-                        // Keep console.warn for actual warnings
-                        `[${this.id}] Unhandled node kind:`,
-                        ts.SyntaxKind[node.kind],
-                        "Node text:",
-                        node.getText()?.substring(0, 100), // Log snippet
-                    );
+                    if (!(node.kind in IGNORED_NODES)) {
+                        console.warn(
+                            // Keep console.warn for actual warnings
+                            `[${this.id}] Unhandled node kind:`,
+                            ts.SyntaxKind[node.kind],
+                            "Node text:",
+                            node.getText()?.substring(0, 100), // Log snippet
+                        );
+                    }
                     result = ""; // Return empty for unhandled for now
                 }
             }
