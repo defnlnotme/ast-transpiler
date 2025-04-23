@@ -334,6 +334,8 @@ export class JuliaTranspiler extends BaseTranspiler {
         console.warn(
             "Unhandled BindingName type in printVariableDeclaration:",
             ts.SyntaxKind[nameNode.kind],
+            "file:",
+            nameNode.getSourceFile().fileName
         );
         const printedName = this.printNode(nameNode, 0);
         const printedInitializer = initializer
@@ -1073,6 +1075,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                 if (ts.isSourceFile(node)) {
                     // Logic for SourceFile - iterates statements
                     result = "";
+                    this.setCurrentFileName(node.fileName);
                     node.statements.forEach((statement, index) => {
                         // Get the printed statement for the current node
                         const printedStatement = this.printNode(statement, 0); // Use 0 indent for top-level
@@ -1257,6 +1260,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                             ts.SyntaxKind[node.kind],
                             "Node text:",
                             node.getText()?.substring(0, 100), // Log snippet
+                            "file:", // Add current file information
+                            node.getSourceFile().fileName // Log the file name
                         );
                     }
                     result = ""; // Return empty for unhandled for now
