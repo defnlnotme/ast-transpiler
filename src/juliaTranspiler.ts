@@ -1075,7 +1075,6 @@ export class JuliaTranspiler extends BaseTranspiler {
                 if (ts.isSourceFile(node)) {
                     // Logic for SourceFile - iterates statements
                     result = "";
-                    this.setCurrentFileName(node.fileName);
                     node.statements.forEach((statement, index) => {
                         // Get the printed statement for the current node
                         const printedStatement = this.printNode(statement, 0); // Use 0 indent for top-level
@@ -1801,6 +1800,8 @@ export class JuliaTranspiler extends BaseTranspiler {
                 ts.SyntaxKind[expression.kind],
                 "Text:",
                 expression.getText()?.substring(0, 100),
+                "File:",
+                expression.getSourceFile().fileName
             );
         }
         let parsedExpression = this.printNode(expression, 0); // Use 0 indent
