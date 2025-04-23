@@ -60,7 +60,7 @@ export default class Transpiler {
         const juliaConfig = config["julia"] || {};
 
         if ("verbose" in config) {
-            Logger.setVerboseMode(config['verbose']);
+            Logger.setVerboseMode(Boolean(config['verbose']));
         }
 
         this.pythonTranspiler = new PythonTranspiler(pythonConfig);
