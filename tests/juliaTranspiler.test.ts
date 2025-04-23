@@ -1155,4 +1155,12 @@ end;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
+    test('packing', () => {
+        const ts =
+`const params = { method, headers, body, timeout: this.timeout };`;
+        const julia =
+`params = Dict{Symbol, Any}(pairs((; method, headers, body, timeout = self.timeout)));\n`
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 });

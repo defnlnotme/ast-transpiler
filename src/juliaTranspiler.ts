@@ -724,17 +724,56 @@ export class JuliaTranspiler extends BaseTranspiler {
 
     printObjectLiteralExpression(node, identation) {
         if (node.properties.length === 0) {
-            // handle empty object {}
-            return "Dict{Symbol, Any}()"; // Explicitly type empty Dict
+            return "Dict{Symbol, Any}()";
         }
 
-        // Use identation + 1 for properties *inside* the Dict() call
-        const objectBody = node.properties
-            .map((p) => this.printPropertyAssignment(p, identation + 1)) // Indent properties
-            .join(",\n"); // Join properties with comma and newline
+        // Check for the "packing" pattern:
+        // - Uses shorthand properties { name }
+        // - OR assigns non-literal values { key: variable, key2: this.prop }
+        const isPackingPattern = node.properties.some(prop => ts.isShorthandPropertyAssignment(prop));
+        const assignsOnlyNonLiterals = node.properties.every(prop => {
+            if (ts.isShorthandPropertyAssignment(prop)) return true;
+            if (ts.isPropertyAssignment(prop) && prop.initializer) {
+                // Check if initializer is NOT a literal type
+                return !ts.isStringLiteral(prop.initializer) &&
+                       !ts.isNumericLiteral(prop.initializer) &&
+                       !(prop.initializer.kind === ts.SyntaxKind.TrueKeyword) && // isBooleanLiteral is internal
+                       !(prop.initializer.kind === ts.SyntaxKind.FalseKeyword) &&
+                       !ts.isArrayLiteralExpression(prop.initializer) &&
+                       !ts.isObjectLiteralExpression(prop.initializer) &&
+                       !(prop.initializer.kind === ts.SyntaxKind.NullKeyword) &&
+                       !(prop.initializer.kind === ts.SyntaxKind.UndefinedKeyword);
+            }
+            return false; // Ignore other property types for this check
+        });
 
-        // Structure: Dict(\n <indented properties> \n <base indent>)
-        return `Dict(\n${objectBody}\n${this.getIden(identation)})`;
+        // Use Dict(pairs((; ... ))) ONLY for the packing pattern
+        if (isPackingPattern || assignsOnlyNonLiterals) {
+             const pairsArgs = node.properties.map(prop => {
+                 if (ts.isShorthandPropertyAssignment(prop)) {
+                     // Shorthand: { method } -> method
+                     return this.printNode(prop.name, 0);
+                 } else if (ts.isPropertyAssignment(prop)) {
+                     // Regular: { timeout: this.timeout } -> timeout = self.timeout
+                     // Ensure the key is printed as a simple identifier if possible
+                     const key = ts.isIdentifier(prop.name) ? prop.name.text : this.printNode(prop.name, 0);
+                     const value = this.printNode(prop.initializer, 0);
+                     return `${key} = ${value}`;
+                 } else {
+                      console.warn(`[JuliaTranspiler] Unexpected property kind in object literal for packing: ${ts.SyntaxKind[prop.kind]}`);
+                      return `#UNHANDLED_PROP#`;
+                 }
+             }).join(', ');
+             return `Dict{Symbol, Any}(pairs((; ${pairsArgs})))`;
+        } else {
+             // Fallback to standard Dict(Symbol("key") => value, ...) creation
+             const objectBody = node.properties
+                 .map((p) => this.printPropertyAssignment(p, identation + 1)) // Indent properties
+                 .join(",\n"); // Join properties with comma and newline
+
+             // Structure: Dict(\n <indented properties> \n <base indent>)
+             return `Dict(\n${objectBody}\n${this.getIden(identation)})`;
+        }
     }
 
     printReturnStatementWithoutIndent(node) {
