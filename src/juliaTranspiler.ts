@@ -22,7 +22,7 @@ const conditionalDebugLog = (...args: any[]) => {
 // --- End Conditional Debug Logging ---
 
 const SyntaxKind = ts.SyntaxKind;
-const IGNORED_NODES = new Set<ts.SyntaxKind>([SyntaxKind.ImportDeclaration]);
+const IGNORED_NODES = new Set<ts.SyntaxKind>([SyntaxKind.ImportDeclaration, SyntaxKind.ImportKeyword]);
 
 const parserConfig = {
     STATIC_TOKEN: "", // to do static decorator
