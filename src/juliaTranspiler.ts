@@ -22,7 +22,10 @@ const conditionalDebugLog = (...args: any[]) => {
 // --- End Conditional Debug Logging ---
 
 const SyntaxKind = ts.SyntaxKind;
-const IGNORED_NODES = new Set<ts.SyntaxKind>([SyntaxKind.ImportDeclaration, SyntaxKind.ImportKeyword]);
+const IGNORED_NODES = new Set<ts.SyntaxKind>([
+    SyntaxKind.ImportDeclaration,
+    SyntaxKind.ImportKeyword,
+]);
 
 const parserConfig = {
     STATIC_TOKEN: "", // to do static decorator
@@ -335,7 +338,7 @@ export class JuliaTranspiler extends BaseTranspiler {
             "Unhandled BindingName type in printVariableDeclaration:",
             ts.SyntaxKind[nameNode.kind],
             "file:",
-            nameNode.getSourceFile().fileName
+            nameNode.getSourceFile().fileName,
         );
         const printedName = this.printNode(nameNode, 0);
         const printedInitializer = initializer
@@ -722,7 +725,10 @@ export class JuliaTranspiler extends BaseTranspiler {
         return "nothing";
     }
 
-    printObjectLiteralExpression(node: ts.ObjectLiteralExpression, identation: number): string {
+    printObjectLiteralExpression(
+        node: ts.ObjectLiteralExpression,
+        identation: number,
+    ): string {
         // Always use the standard Dict(key => value) format
         if (node.properties.length === 0) {
             return "Dict{Symbol, Any}()"; // Explicitly type empty Dict
@@ -941,7 +947,10 @@ export class JuliaTranspiler extends BaseTranspiler {
         const elseStatement = node.elseStatement;
         if (elseStatement) {
             if (elseStatement?.kind === ts.SyntaxKind.Block) {
-                const elseBlock = this.printBlock(elseStatement, identation + 1);
+                const elseBlock = this.printBlock(
+                    elseStatement,
+                    identation + 1,
+                );
                 result +=
                     this.getIden(identation) +
                     this.ELSE_TOKEN +
@@ -1259,7 +1268,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                             "Node text:",
                             node.getText()?.substring(0, 100), // Log snippet
                             "file:", // Add current file information
-                            node.getSourceFile().fileName // Log the file name
+                            node.getSourceFile().fileName, // Log the file name
                         );
                     }
                     result = ""; // Return empty for unhandled for now
@@ -1332,7 +1341,13 @@ export class JuliaTranspiler extends BaseTranspiler {
             let trailingComment = this.printTraillingComment(node, identation);
             trailingComment = trailingComment ? " " + trailingComment : "";
 
-            return this.getIden(identation) + symbolKey + " => " + value + trailingComment;
+            return (
+                this.getIden(identation) +
+                symbolKey +
+                " => " +
+                value +
+                trailingComment
+            );
         }
 
         // Original logic for PropertyAssignment
@@ -1340,23 +1355,25 @@ export class JuliaTranspiler extends BaseTranspiler {
             const { name, initializer } = node;
             let nameKey: string;
 
-             // Determine the key format: :key for identifiers, Symbol("...") for complex/string literals
-             if (ts.isIdentifier(name)) {
-                 // Handle potential reserved keywords for the symbol literal
-                 const identifierName = this.transformIdentifierForReservedKeywords(name.text);
-                  nameKey = `Symbol("${identifierName}")`; // Use Symbol("key") format
-             } else if (ts.isStringLiteral(name)) {
-                 // String literals become Symbol("string literal content")
-                 nameKey = `Symbol("${name.text}")`;
-             } else {
-                 // Fallback for computed property names or other complex cases
-                 const nameAsString = this.printNode(name, 0);
-                 // Use Symbol constructor if the name isn't a simple identifier/string
-                 nameKey = `Symbol(${nameAsString})`;
-                 console.warn( // Keep console.warn
-                     `[JuliaTranspiler] Complex property name used as Dict key: ${nameAsString}. Generating Symbol(${nameAsString}). Review if this is intended.`,
-                 );
-             }
+            // Determine the key format: :key for identifiers, Symbol("...") for complex/string literals
+            if (ts.isIdentifier(name)) {
+                // Handle potential reserved keywords for the symbol literal
+                const identifierName =
+                    this.transformIdentifierForReservedKeywords(name.text);
+                nameKey = `Symbol("${identifierName}")`; // Use Symbol("key") format
+            } else if (ts.isStringLiteral(name)) {
+                // String literals become Symbol("string literal content")
+                nameKey = `Symbol("${name.text}")`;
+            } else {
+                // Fallback for computed property names or other complex cases
+                const nameAsString = this.printNode(name, 0);
+                // Use Symbol constructor if the name isn't a simple identifier/string
+                nameKey = `Symbol(${nameAsString})`;
+                console.warn(
+                    // Keep console.warn
+                    `[JuliaTranspiler] Complex property name used as Dict key: ${nameAsString}. Generating Symbol(${nameAsString}). Review if this is intended.`,
+                );
+            }
 
             // Handle initializer safely
             const customRightSide = this.printCustomRightSidePropertyAssignment(
@@ -1368,7 +1385,9 @@ export class JuliaTranspiler extends BaseTranspiler {
             // Ensure initializer is passed to printNode only if it exists
             const valueAsString = customRightSide
                 ? customRightSide
-                : initializer ? this.printNode(initializer, 0) : 'nothing'; // Default to 'nothing' if initializer is missing
+                : initializer
+                  ? this.printNode(initializer, 0)
+                  : "nothing"; // Default to 'nothing' if initializer is missing
 
             let trailingComment = this.printTraillingComment(node, identation); // Use outer identation for comment positioning
             trailingComment = trailingComment ? " " + trailingComment : ""; // Add leading space if comment exists
@@ -1393,8 +1412,13 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
 
         // Fallback for other property types (like MethodDeclaration in object literals, though less common)
-        console.warn(`[JuliaTranspiler] Unhandled property type in object literal: ${ts.SyntaxKind[node.kind]}`);
-        return this.getIden(identation) + `# TODO: Unhandled property: ${node.getText()}`;
+        console.warn(
+            `[JuliaTranspiler] Unhandled property type in object literal: ${ts.SyntaxKind[node.kind]}`,
+        );
+        return (
+            this.getIden(identation) +
+            `# TODO: Unhandled property: ${node.getText()}`
+        );
     }
 
     printCustomRightSidePropertyAssignment(node, identation): string {
@@ -1526,7 +1550,9 @@ export class JuliaTranspiler extends BaseTranspiler {
         }
     }
 
-    printCallExpression(node: ts.CallExpression, identation: number): string { // Keep identation param, but maybe don't use it directly for the final string
+    printCallExpression(node: ts.CallExpression, identation: number): string {
+        // Keep identation param, but maybe don't use it directly for the final string
+
         conditionalDebugLog(
             "Entering printCallExpression function",
             ts.SyntaxKind[node.kind],
@@ -1536,34 +1562,36 @@ export class JuliaTranspiler extends BaseTranspiler {
         const parsedArgs = this.printArgsForCallExpression(node, 0); // Arguments string without outer indent
 
         // --- Revised `extractLeadingComment` (Keep as is) ---
-        const extractLeadingComment = (text: string): { comment: string; code: string } => {
-            const lines = text.split('\n');
+        const extractLeadingComment = (
+            text: string,
+        ): { comment: string; code: string } => {
+            const lines = text.split("\n");
             const commentLines: string[] = [];
             let firstCodeLineIndex = -1; // Index of the first non-comment/non-empty line
 
             for (let i = 0; i < lines.length; i++) {
                 const trimmedLine = lines[i].trim();
-                if (trimmedLine.startsWith('#')) {
-                     // Always capture comment lines if code hasn't been found yet
+                if (trimmedLine.startsWith("#")) {
+                    // Always capture comment lines if code hasn't been found yet
                     if (firstCodeLineIndex === -1) {
                         commentLines.push(lines[i]);
                     } else {
                         break; // Found code earlier, stop processing comments
                     }
-                } else if (trimmedLine === '') {
+                } else if (trimmedLine === "") {
                     // Capture blank lines *only* if we haven't hit code yet
                     if (firstCodeLineIndex === -1) {
                         commentLines.push(lines[i]);
                     } else {
-                          break; // Found code, stop collecting comments
+                        break; // Found code, stop collecting comments
                     }
                 } else {
                     // Found the first non-comment/non-empty line
                     if (firstCodeLineIndex === -1) {
-                         firstCodeLineIndex = i;
+                        firstCodeLineIndex = i;
                     }
-                     // Continue loop to process all lines, but stop capturing comments
-                     // Break only if it's a comment/blank line *after* code was found
+                    // Continue loop to process all lines, but stop capturing comments
+                    // Break only if it's a comment/blank line *after* code was found
                 }
             }
 
@@ -1571,34 +1599,98 @@ export class JuliaTranspiler extends BaseTranspiler {
                 firstCodeLineIndex = lines.length;
             }
 
-            const comment = commentLines.join('\n');
-            const code = lines.slice(firstCodeLineIndex).join('\n');
+            const comment = commentLines.join("\n");
+            const code = lines.slice(firstCodeLineIndex).join("\n");
 
             // Return untrimmed comment, trimmed code start
             return { comment: comment.trimEnd(), code: code.trimStart() }; // Trim comment end, code start
         };
-
 
         // Check what is being called (the expression part of the CallExpression)
         if (ts.isPropertyAccessExpression(expression)) {
             const propertyAccessExpression = expression;
             const baseExpression = propertyAccessExpression.expression;
             const memberNameNode = propertyAccessExpression.name;
+            const memberName = memberNameNode.text; // Get the member name (e.g., 'call')
 
             // --- Specific Property Access Call Types ---
-            // ... (Cases 1, 2, 3, 4 remain largely the same, they don't usually involve comments needing separation in this way) ...
-             // 1. super.method(...)
+
+            // Handle .call(...) -> direct function call with context as first arg
+            if (memberName === "call") {
+                // The base expression is the function being called (e.g., 'method' in method.call)
+                const functionToCall = this.printNode(baseExpression, 0);
+
+                // The *first* argument to .call in TS corresponds to 'this' in the context
+                // of the called function. We need to extract it and put it first in the Julia call.
+                const callArgs = node.arguments;
+                if (callArgs && callArgs.length > 0) {
+                    const thisArgNode = callArgs[0];
+                    let thisArgString = this.printNode(thisArgNode, 0);
+                    // If 'this' was passed, translate it to 'self'
+                    if (thisArgNode.kind === ts.SyntaxKind.ThisKeyword) {
+                        thisArgString = "self";
+                    }
+
+                    // Get the rest of the arguments
+                    const remainingArgs = callArgs
+                        .slice(1)
+                        .map((arg) => this.printNode(arg, 0))
+                        .join(", ");
+
+                    // Construct the Julia call: functionToCall(thisArg, remainingArgs...)
+                    let finalArgs = thisArgString;
+                    if (remainingArgs) {
+                        finalArgs += ", " + remainingArgs;
+                    }
+                    return `${functionToCall}(${finalArgs})`;
+                } else {
+                    // .call without arguments? Unlikely, but handle gracefully
+                    // Assume global context if no 'this' arg is provided.
+                    return `${functionToCall}()`;
+                }
+            }
+            // Handle .apply(...) -> direct function call splatting the second arg
+            else if (memberName === "apply") {
+                const functionToCall = this.printNode(baseExpression, 0);
+                const callArgs = node.arguments;
+
+                let thisArgString = "nothing"; // Default context for apply if none provided
+                let argsToSplat = "[]"; // Default empty array if no args array provided
+
+                if (callArgs && callArgs.length > 0) {
+                    const thisArgNode = callArgs[0];
+                    thisArgString = this.printNode(thisArgNode, 0);
+                    if (thisArgNode.kind === ts.SyntaxKind.ThisKeyword) {
+                        thisArgString = "self";
+                    }
+
+                    if (callArgs.length > 1) {
+                        const argsArrayNode = callArgs[1];
+                        argsToSplat = this.printNode(argsArrayNode, 0);
+                    }
+                }
+                // Construct the Julia call: functionToCall(thisArg, argsToSplat...)
+                return `${functionToCall}(${thisArgString}, ${argsToSplat}...)`;
+            }
+
+            // 1. super.method(...)
             if (baseExpression.kind === ts.SyntaxKind.SuperKeyword) {
-                const methodName = this.printNode(memberNameNode, 0);
+                //const methodName = this.printNode(memberNameNode, 0); // already have memberName
                 const juliaArgs = parsedArgs ? "self, " + parsedArgs : "self";
-                return `self.parent.${methodName}(${juliaArgs})`; // No comment handling needed here usually
+                // Apply uncamelcase to the method name if needed
+                const transformedMemberName =
+                    this.transformMethodNameIfNeeded(memberName);
+                return `self.parent.${transformedMemberName}(${juliaArgs})`; // No comment handling needed here usually
             }
 
             // 2. this.method(...)
             if (baseExpression.kind === ts.SyntaxKind.ThisKeyword) {
-                const methodName = this.printNode(memberNameNode, 0);
+                //const methodName = this.printNode(memberNameNode, 0); // already have memberName
                 const juliaArgs = parsedArgs ? "self, " + parsedArgs : "self";
-                return `self.${methodName}(${juliaArgs})`; // No comment handling needed here usually
+                // Apply uncamelcase to the method name if needed
+                const transformedMemberName =
+                    this.transformMethodNameIfNeeded(memberName);
+                return `self.${transformedMemberName}(${juliaArgs})`; // Use transformed name
             }
 
             // 3. Full Property Access Replacements (e.g., Built-ins like console.log, JSON.stringify)
@@ -1613,59 +1705,110 @@ export class JuliaTranspiler extends BaseTranspiler {
             }
 
             // 4. Specific Built-in Method Calls (Array, Object, Math, JSON, Promise, Number, Date)
-             if (ts.isIdentifier(baseExpression)) {
-                 const baseName = baseExpression.text;
-                 const memberName = memberNameNode.text;
-                 const args = node.arguments ?? [];
+            if (ts.isIdentifier(baseExpression)) {
+                const baseName = baseExpression.text;
+                //const memberName = memberNameNode.text; // Already have memberName
+                const args = node.arguments ?? [];
 
-                 if (args.length === 1) {
-                     const parsedArg = this.printNode(args[0], 0);
-                     switch (memberName) {
-                         case "parse":
-                             if (baseName === "JSON") return this.printJsonParseCall(node, 0, parsedArg); // Use 0 indent internally
-                             break;
-                         case "stringify":
-                             if (baseName === "JSON") return this.printJsonStringifyCall(node, 0, parsedArg);
-                             break;
-                         case "isArray":
-                             if (baseName === "Array") return this.printArrayIsArrayCall(node, 0, parsedArg);
-                              break;
-                         case "keys":
-                             if (baseName === "Object") return this.printObjectKeysCall(node, 0, parsedArg);
-                             break;
-                         case "values":
-                             if (baseName === "Object") return this.printObjectValuesCall(node, 0, parsedArg);
-                             break;
-                         case "all":
-                              if (baseName === "Promise") return this.printPromiseAllCall(node, 0, parsedArg);
-                              break;
-                         case "round":
-                             if (baseName === "Math") return this.printMathRoundCall(node, 0, parsedArg);
-                             break;
-                         case "floor":
-                              if (baseName === "Math") return this.printMathFloorCall(node, 0, parsedArg);
-                              break;
-                         case "ceil":
-                             if (baseName === "Math") return this.printMathCeilCall(node, 0, parsedArg);
-                              break;
-                         case "isInteger":
-                              if (baseName === "Number") return this.printNumberIsIntegerCall(node, 0, parsedArg);
-                              break;
-                     }
-                 } else if (args.length === 0) {
-                     switch (memberName) {
-                         case "now":
-                              if (baseName === "Date") return this.printDateNowCall(node, 0);
-                              break;
-                     }
-                 }
-             }
-
+                if (args.length === 1) {
+                    const parsedArg = this.printNode(args[0], 0);
+                    switch (memberName) {
+                        case "parse":
+                            if (baseName === "JSON")
+                                return this.printJsonParseCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                ); // Use 0 indent internally
+                            break;
+                        case "stringify":
+                            if (baseName === "JSON")
+                                return this.printJsonStringifyCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "isArray":
+                            if (baseName === "Array")
+                                return this.printArrayIsArrayCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "keys":
+                            if (baseName === "Object")
+                                return this.printObjectKeysCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "values":
+                            if (baseName === "Object")
+                                return this.printObjectValuesCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "all":
+                            if (baseName === "Promise")
+                                return this.printPromiseAllCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "round":
+                            if (baseName === "Math")
+                                return this.printMathRoundCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "floor":
+                            if (baseName === "Math")
+                                return this.printMathFloorCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "ceil":
+                            if (baseName === "Math")
+                                return this.printMathCeilCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                        case "isInteger":
+                            if (baseName === "Number")
+                                return this.printNumberIsIntegerCall(
+                                    node,
+                                    0,
+                                    parsedArg,
+                                );
+                            break;
+                    }
+                } else if (args.length === 0) {
+                    switch (memberName) {
+                        case "now":
+                            if (baseName === "Date")
+                                return this.printDateNowCall(node, 0);
+                            break;
+                    }
+                }
+            }
 
             // ---- Start Handling Instance Method Calls (Revised comment handling) ----
-            const memberName = memberNameNode.text;
+            //const memberName = memberNameNode.text; // Already have memberName
             const parsedBaseWithComments = this.printNode(baseExpression, 0); // Get base WITH potential comments, use 0 indent internally
-            const { comment: leadingComment, code: commentFreeBase } = extractLeadingComment(parsedBaseWithComments);
+            const { comment: leadingComment, code: commentFreeBase } =
+                extractLeadingComment(parsedBaseWithComments);
 
             const args = node.arguments ?? [];
 
@@ -1680,122 +1823,240 @@ export class JuliaTranspiler extends BaseTranspiler {
                         : undefined;
                 switch (memberName) {
                     case "push":
-                        juliaCallResult = this.printArrayPushCall(node, 0, commentFreeBase, parsedArg1); // Pass 0 indent
+                        juliaCallResult = this.printArrayPushCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        ); // Pass 0 indent
                         break;
                     case "includes":
-                        juliaCallResult = this.printIncludesCall(node, 0, commentFreeBase, parsedArg1);
+                        juliaCallResult = this.printIncludesCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
                         break;
                     case "indexOf":
-                         juliaCallResult = this.printIndexOfCall(node, 0, commentFreeBase, parsedArg1);
-                         break;
+                        juliaCallResult = this.printIndexOfCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
+                        break;
                     case "join":
-                         juliaCallResult = this.printJoinCall(node, 0, commentFreeBase, parsedArg1);
-                         break;
+                        juliaCallResult = this.printJoinCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
+                        break;
                     case "split":
-                         juliaCallResult = this.printSplitCall(node, 0, commentFreeBase, parsedArg1);
-                         break;
+                        juliaCallResult = this.printSplitCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
+                        break;
                     case "toFixed":
-                         juliaCallResult = this.printToFixedCall(node, 0, commentFreeBase, parsedArg1);
-                         break;
+                        juliaCallResult = this.printToFixedCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
+                        break;
                     case "concat": {
-                        const allParsedConcatArgs = node.arguments.map((arg) => this.printNode(arg, 0)).join(", ");
-                        juliaCallResult = this.printConcatCall(node, 0, commentFreeBase, allParsedConcatArgs);
+                        const allParsedConcatArgs = node.arguments
+                            .map((arg) => this.printNode(arg, 0))
+                            .join(", ");
+                        juliaCallResult = this.printConcatCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            allParsedConcatArgs,
+                        );
                         break;
                     }
                     case "search":
-                         juliaCallResult = this.printSearchCall(node, 0, commentFreeBase, parsedArg1);
-                         break;
+                        juliaCallResult = this.printSearchCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
+                        break;
                     case "endsWith":
-                         juliaCallResult = this.printEndsWithCall(node, 0, commentFreeBase, parsedArg1);
-                         break;
+                        juliaCallResult = this.printEndsWithCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
+                        break;
                     case "startsWith":
-                         juliaCallResult = this.printStartsWithCall(node, 0, commentFreeBase, parsedArg1);
-                         break;
-                     case "padEnd":
-                          juliaCallResult = this.printPadEndCall(node, 0, commentFreeBase, parsedArg1, parsedArg2);
-                          break;
-                     case "padStart":
-                          juliaCallResult = this.printPadStartCall(node, 0, commentFreeBase, parsedArg1, parsedArg2);
-                          break;
+                        juliaCallResult = this.printStartsWithCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                        );
+                        break;
+                    case "padEnd":
+                        juliaCallResult = this.printPadEndCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                            parsedArg2,
+                        );
+                        break;
+                    case "padStart":
+                        juliaCallResult = this.printPadStartCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                            parsedArg1,
+                            parsedArg2,
+                        );
+                        break;
                     // Add other 1/2+ arg methods here...
                 }
-                 // Handle methods with at least two arguments (that weren't handled above)
-                if (!juliaCallResult && args.length >= 2) { // Check if not already handled
-                     // Re-parse args just in case they were needed differently
-                     const parsedArg1_2 = this.printNode(args[0], 0).trimStart();
-                     const parsedArg2_2 = this.printNode(args[1], 0).trimStart();
-                     switch (memberName) {
-                         case "slice":
-                             juliaCallResult = this.printSliceCall(node, 0, commentFreeBase, parsedArg1_2, parsedArg2_2);
-                             break;
-                         case "replace":
-                             juliaCallResult = this.printReplaceCall(node, 0, commentFreeBase, parsedArg1_2, parsedArg2_2);
-                             break;
-                          case "replaceAll":
-                              juliaCallResult = this.printReplaceAllCall(node, 0, commentFreeBase, parsedArg1_2, parsedArg2_2);
-                              break;
-                     }
-                 }
+                // Handle methods with at least two arguments (that weren't handled above)
+                if (!juliaCallResult && args.length >= 2) {
+                    // Check if not already handled
+                    // Re-parse args just in case they were needed differently
+                    const parsedArg1_2 = this.printNode(args[0], 0).trimStart();
+                    const parsedArg2_2 = this.printNode(args[1], 0).trimStart();
+                    switch (memberName) {
+                        case "slice":
+                            juliaCallResult = this.printSliceCall(
+                                node,
+                                0,
+                                commentFreeBase,
+                                parsedArg1_2,
+                                parsedArg2_2,
+                            );
+                            break;
+                        case "replace":
+                            juliaCallResult = this.printReplaceCall(
+                                node,
+                                0,
+                                commentFreeBase,
+                                parsedArg1_2,
+                                parsedArg2_2,
+                            );
+                            break;
+                        case "replaceAll":
+                            juliaCallResult = this.printReplaceAllCall(
+                                node,
+                                0,
+                                commentFreeBase,
+                                parsedArg1_2,
+                                parsedArg2_2,
+                            );
+                            break;
+                    }
+                }
             }
             // Handle specific member calls with 0 arguments
-            else if (!juliaCallResult && args.length === 0) { // Check if not already handled
+            else if (!juliaCallResult && args.length === 0) {
+                // Check if not already handled
                 switch (memberName) {
                     case "toString":
-                        juliaCallResult = this.printToStringCall(node, 0, commentFreeBase);
+                        juliaCallResult = this.printToStringCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                        );
                         break;
-                     case "toUpperCase":
-                         juliaCallResult = this.printToUpperCaseCall(node, 0, commentFreeBase);
-                         break;
-                     case "toLowerCase":
-                         juliaCallResult = this.printToLowerCaseCall(node, 0, commentFreeBase);
-                          break;
-                     case "shift":
-                         juliaCallResult = this.printShiftCall(node, 0, commentFreeBase);
-                          break;
-                     case "pop":
-                         juliaCallResult = this.printPopCall(node, 0, commentFreeBase);
-                         break;
-                      case "reverse":
-                          juliaCallResult = this.printReverseCall(node, 0, commentFreeBase);
-                           break;
-                      case "trim":
-                          juliaCallResult = this.printTrimCall(node, 0, commentFreeBase);
-                          break;
+                    case "toUpperCase":
+                        juliaCallResult = this.printToUpperCaseCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                        );
+                        break;
+                    case "toLowerCase":
+                        juliaCallResult = this.printToLowerCaseCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                        );
+                        break;
+                    case "shift":
+                        juliaCallResult = this.printShiftCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                        );
+                        break;
+                    case "pop":
+                        juliaCallResult = this.printPopCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                        );
+                        break;
+                    case "reverse":
+                        juliaCallResult = this.printReverseCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                        );
+                        break;
+                    case "trim":
+                        juliaCallResult = this.printTrimCall(
+                            node,
+                            0,
+                            commentFreeBase,
+                        );
+                        break;
                     // Add other 0-arg member methods
                 }
             }
 
             // If a specific print*Call handled it, combine comment and code
             if (juliaCallResult) {
-                let indent = this.getIndentationRegex(leadingComment)
-                juliaCallResult = indent + this.getIden(identation) + juliaCallResult;
+                let indent = this.getIndentationRegex(leadingComment);
+                juliaCallResult =
+                    indent + this.getIden(identation) + juliaCallResult;
                 // Combine comment and code. The caller (e.g., printExpressionStatement) adds the final indent.
-                 if (leadingComment.trim()) {
-                      return leadingComment.trimEnd() + '\n' + juliaCallResult; // Add newline if comment exists
-                 } else {
-                      return juliaCallResult; // No comment, just return the code
-                 }
+                if (leadingComment.trim()) {
+                    return leadingComment.trimEnd() + "\n" + juliaCallResult; // Add newline if comment exists
+                } else {
+                    return juliaCallResult; // No comment, just return the code
+                }
             }
 
             // 5. Other Instance Method Calls (Fallback)
             const instanceName = commentFreeBase; // Use comment-free base
-            const methodName = this.printNode(memberNameNode, 0); // Already includes uncamelcase if needed
-            const juliaInstanceMethodArgs = instanceName + (parsedArgs ? ", " + parsedArgs : "");
-            juliaCallResult = `${instanceName}.${methodName}(${juliaInstanceMethodArgs})`;
+            const transformedMemberName =
+                this.transformMethodNameIfNeeded(memberName); // Apply uncamelcase here
+            const juliaInstanceMethodArgs =
+                instanceName + (parsedArgs ? ", " + parsedArgs : "");
+            juliaCallResult = `${instanceName}.${transformedMemberName}(${juliaInstanceMethodArgs})`; // Use transformed name
             // Combine comment and code for the fallback case as well
-             if (leadingComment.trim()) {
-                  return leadingComment.trimEnd() + '\n' + juliaCallResult;
-             } else {
-                  return juliaCallResult;
-             }
-
-
+            if (leadingComment.trim()) {
+                return leadingComment.trimEnd() + "\n" + juliaCallResult;
+            } else {
+                return juliaCallResult;
+            }
         } else if (ts.isIdentifier(expression)) {
-             // --- Direct Identifier Calls (No change needed for comment handling here) ---
-             // ... (existing code for identifier calls) ...
-            const functionName = expression.text ?? (expression.escapedText as string);
-            if (this.CallExpressionReplacements.hasOwnProperty(functionName as string)) {
-                let replacement = this.CallExpressionReplacements[functionName as string];
+            // --- Direct Identifier Calls (No change needed for comment handling here) ---
+            const functionName =
+                expression.text ?? (expression.escapedText as string);
+            if (
+                this.CallExpressionReplacements.hasOwnProperty(
+                    functionName as string,
+                )
+            ) {
+                let replacement =
+                    this.CallExpressionReplacements[functionName as string];
                 if (replacement.endsWith("(") || replacement.endsWith(", ")) {
                     return `${replacement}${parsedArgs})`;
                 } else {
@@ -1805,12 +2066,14 @@ export class JuliaTranspiler extends BaseTranspiler {
             if (functionName === "assert") {
                 return this.printAssertCall(node, 0, parsedArgs); // Use 0 indent
             }
-             const transformedFunctionName = this.transformCallExpressionName(this.unCamelCaseIfNeeded(functionName as string));
-             return `${transformedFunctionName}(${parsedArgs})`;
-
+            // Apply uncamelcase to direct function calls if needed
+            const transformedFunctionName = this.transformFunctionNameIfNeeded(
+                functionName as string,
+            );
+            return `${transformedFunctionName}(${parsedArgs})`; // Use transformed name
         } else if (expression.kind === ts.SyntaxKind.SuperKeyword) {
             // --- Standalone super() Call (No change needed) ---
-            return "";
+            return ""; // super() usually implies a constructor call, handled elsewhere? Or means calling parent's method implicitly? Julia needs explicit parent call.
         }
 
         // --- Fallback for Unhandled Call Expression Types (No change needed) ---
@@ -1821,14 +2084,33 @@ export class JuliaTranspiler extends BaseTranspiler {
                 "Text:",
                 expression.getText()?.substring(0, 100),
                 "File:",
-                expression.getSourceFile().fileName
+                expression.getSourceFile().fileName,
             );
         }
         let parsedExpression = this.printNode(expression, 0); // Use 0 indent
-        if (parsedExpression.endsWith(")") || parsedExpression.trimRight().endsWith(")")) {
-             return parsedExpression;
+        if (
+            parsedExpression.endsWith(")") ||
+            parsedExpression.trimRight().endsWith(")")
+        ) {
+            return parsedExpression;
         }
         return `${parsedExpression}(${parsedArgs})`;
+    }
+
+    printArgsForCallExpression(
+        node: ts.CallExpression,
+        identation: number,
+    ): string {
+        const args = node.arguments;
+
+        const argsList = args.length > 0 ? args : [];
+        const parsedArgs = argsList
+            .map((a) => {
+                // Print each argument without applying outer indentation
+                return this.printNode(a, 0).trim(); // Trim ensures no extra whitespace around the arg
+            })
+            .join(", ");
+        return parsedArgs;
     }
 
     printJsonParseCall(node: any, identation: any, parsedArg?: any) {
@@ -2273,7 +2555,10 @@ export class JuliaTranspiler extends BaseTranspiler {
     printTryStatement(node, identation) {
         const tryBody = this.printBlock(node.tryBlock, identation + 1);
 
-        const catchBody = this.printBlock(node.catchClause.block, identation + 1);
+        const catchBody = this.printBlock(
+            node.catchClause.block,
+            identation + 1,
+        );
         const catchDeclaration = this.CATCH_DECLARATION; // + " " + this.printNode(node.catchClause.variableDeclaration.name, 0);
 
         const catchCondOpen = this.CONDITION_OPENING
@@ -3354,9 +3639,10 @@ export class JuliaTranspiler extends BaseTranspiler {
                             // Add indentation based on the original identation param
                             // Remove check for '*' as it's handled by transformLeadingComment
                             return this.getIden(identation) + line;
-                         })
+                        })
                         .join("\n");
-                    res += this.transformLeadingComment(formatted.trim()) + "\n"; // Add newline after each transformed comment block
+                    res +=
+                        this.transformLeadingComment(formatted.trim()) + "\n"; // Add newline after each transformed comment block
                 }
             }
         }
@@ -3395,15 +3681,15 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     getIndentationRegex(text: string): string {
-      if (!text) {
-        return ""; // Handle null, undefined, or empty string
-      }
+        if (!text) {
+            return ""; // Handle null, undefined, or empty string
+        }
 
-      // Match zero or more spaces or tabs at the beginning (^) of the string
-      const match = text.match(/^[\t ]*/);
+        // Match zero or more spaces or tabs at the beginning (^) of the string
+        const match = text.match(/^[\t ]*/);
 
-      // match will return an array where the first element is the matched string,
-      // or null if no match (though with *, it should always match at least "")
-      return match ? match[0] : "";
+        // match will return an array where the first element is the matched string,
+        // or null if no match (though with *, it should always match at least "")
+        return match ? match[0] : "";
     }
 }

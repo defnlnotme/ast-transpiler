@@ -1168,4 +1168,25 @@ end;
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
+    test('dot call', () => {
+        const ts =
+`if (method !== undefined) {
+    method.call (this, client, message, subscription);
+}
+`
+        const julia =
+`if method !== nothing
+    method(self, client, message, subscription);
+end\n`
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
+    test('dot apply', () => {
+        const ts =
+`method.apply (this, args);`
+        const julia =
+`method(self, args...);\n`
+        const output = transpiler.transpileJulia(ts).content;
+        expect(output).toBe(julia);
+    });
 });
