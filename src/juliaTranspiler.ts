@@ -2130,11 +2130,37 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printPropertyDeclaration(node, identation) {
-        const COLON_TOKEN = this.PROPERTY_ASSIGNMENT_TOKEN; // this.PROPERTY_ASSIGNMENT_TOKEN;
+        const COLON_TOKEN = this.PROPERTY_ASSIGNMENT_TOKEN;
         const modifiers = this.printPropertyAccessModifiers(node);
         const name = this.printNode(node.name, 0);
-        let type = this.getType(node);
-        if (!type) type = "Any";
+
+        // Improved type mapping based on TypeScript annotations
+        let type = "Any"; // Default type
+
+        if (node.type) {
+            if (ts.isArrayTypeNode(node.type)) {
+                // Handle array types like string[]
+                const elementType = node.type.elementType;
+                if (elementType.kind === ts.SyntaxKind.StringKeyword) {
+                    type = "Vector{String}";
+                } else if (elementType.kind === ts.SyntaxKind.NumberKeyword) {
+                    type = "Vector{Float64}";
+                } else if (elementType.kind === ts.SyntaxKind.BooleanKeyword) {
+                    type = "Vector{Bool}";
+                } else {
+                    type = "Vector{Any}";
+                }
+            } else if (node.type.kind === ts.SyntaxKind.StringKeyword) {
+                type = "String";
+            } else if (node.type.kind === ts.SyntaxKind.NumberKeyword) {
+                type = "Float64";
+            } else if (node.type.kind === ts.SyntaxKind.BooleanKeyword) {
+                type = "Bool";
+            } else if (node.type.kind === ts.SyntaxKind.AnyKeyword) {
+                type = "Any";
+            }
+        }
+
         let initializer = node.initializer
             ? this.printNode(node.initializer, 0)
             : undefined;
@@ -2162,119 +2188,6 @@ export class JuliaTranspiler extends BaseTranspiler {
         return (
             this.getIden(identation) + name + "::" + type + this.LINE_TERMINATOR
         );
-    }
-
-    printClassBody(node: ts.ClassDeclaration, identation: number): string {
-        let propertiesString = "";
-        const heritageClauses = node.heritageClauses;
-
-        if (heritageClauses !== undefined) {
-            const classExtends =
-                heritageClauses[0].types[0].expression.getText();
-            propertiesString += `${this.getIden(identation + 1)}parent::${classExtends}\n`;
-        }
-
-        node.members.forEach((member) => {
-            // Process *all* PropertyDeclarations for fields
-            if (ts.isPropertyDeclaration(member)) {
-                // Removed isStaticMember check
-                if (ts.isIdentifier(member.name)) {
-                    const propertyName = member.name.text;
-                    let type = "";
-                    let defaultValue = ""; // Use this for @kwdef
-
-                    if (member.type) {
-                        const typeName = member.type.getText();
-                        switch (typeName) {
-                            case "string":
-                                type = "::String";
-                                break;
-                            case "number":
-                                type = "::Float64";
-                                break;
-                            case "boolean":
-                                type = "::Bool";
-                                break;
-                            case "string[]":
-                            case "Array<string>":
-                                type = "::Vector{String}";
-                                break;
-                            case "number[]":
-                            case "Array<number>":
-                                type = "::Vector{Float64}";
-                                break;
-                            case "any":
-                                type = "::Any";
-                                break;
-                            case "{}":
-                                type = "::Dict";
-                                break;
-                            case "Whatever": // example
-                                type = "::Any";
-                                break;
-                            default:
-                                type = ""; // Defaults to Any
-                        }
-                    }
-                    if (type === "") type = "::Any"; // Default to Any if type is not inferred
-
-                    // Get default value from initializer for @kwdef
-                    if (member.initializer) {
-                        defaultValue = ` = ${this.printNode(member.initializer, 0)}`;
-                    }
-
-                    propertiesString += `${this.getIden(identation + 1)}${propertyName}${type}${defaultValue}\n`;
-                }
-            } else if (
-                ts.isMethodDeclaration(member) &&
-                !ts.isConstructorDeclaration(member) &&
-                !this.isStaticMember(member)
-            ) {
-                // Only add method signatures if they are instance methods
-                if (ts.isIdentifier(member.name)) {
-                    const methodName = member.name.text;
-                    // Add method as a Function field with a default value pointing to the function itself
-                    propertiesString += `${this.getIden(identation + 1)}${methodName}::Function = ${methodName}\n`;
-                }
-            }
-        });
-
-        let hasOnlyConstructor = false;
-        let constructorExists = false;
-        let propertyOrMethodExists = false; // Check for any property or instance method
-        let constructorNode: ConstructorDeclaration | undefined = undefined;
-
-        node.members.forEach((member) => {
-            if (ts.isConstructorDeclaration(member)) {
-                constructorExists = true;
-                constructorNode = member;
-            }
-            // Check if there are any properties or instance methods defined
-            // *** FIX: Use this.isStaticMember ***
-            if (
-                ts.isPropertyDeclaration(member) ||
-                (ts.isMethodDeclaration(member) &&
-                    !this.isStaticMember(member) &&
-                    !ts.isConstructorDeclaration(member))
-            ) {
-                propertyOrMethodExists = true;
-            }
-        });
-
-        // Only consider it "has only constructor" if constructor exists AND no properties/methods exist
-        if (constructorExists && !propertyOrMethodExists) {
-            hasOnlyConstructor = true;
-        }
-
-        if (hasOnlyConstructor) {
-            propertiesString += `${this.getIden(identation + 1)}attrs::Dict{Symbol, Any}\n`;
-        }
-
-        if (propertiesString.trim() !== "") {
-            // only add propertiesString if not empty
-            return propertiesString;
-        }
-        return ""; // return empty string if no properties to avoid extra new line
     }
 
     printConstructorDeclaration(
@@ -2328,13 +2241,20 @@ export class JuliaTranspiler extends BaseTranspiler {
     }
 
     printClass(node: ts.ClassDeclaration, identation: number = 0): string {
-        // Ensure identation is never negative
+        // First identify if we have complex nested types that need separate struct definitions
+        const nestedStructs = this.extractNestedStructs(node);
+        let nestedStructsCode = "";
+
+        if (nestedStructs.length > 0) {
+            nestedStructsCode = nestedStructs.join("\n\n") + "\n\n";
+        }
+
+        // Process the main class as usual
         identation = Math.max(0, identation);
         const className = node.name!.text;
         let result = this.printClassDefinition(node, identation);
 
         // Class properties (fields in Julia struct)
-
         result += this.printClassBody(node, identation); // add class body here
         const isChildClass = node.heritageClauses !== undefined;
 
@@ -2349,9 +2269,9 @@ export class JuliaTranspiler extends BaseTranspiler {
                     "\n"; // Capture constructor code
             }
         });
+
+        // Add default constructor if needed
         if (!hasConstructor) {
-            // only add default constructor if there are properties
-            // Default constructor if no constructor is defined - only if there are properties
             const hasProperties = node.members.some(
                 (member) =>
                     ts.isPropertyDeclaration(member) &&
@@ -2390,6 +2310,7 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         result += `${this.getIden(identation)}end\n`; // Close struct
 
+        // Add method definitions outside struct
         let methodsCode = "";
         // Methods (excluding constructor and static methods/properties)
         node.members.forEach((member) => {
@@ -2403,7 +2324,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                         member,
                         identation,
                         className,
-                    ) + "\n"; // Note: identation is not +1 here because methods are outside struct
+                    ) + "\n";
             }
         });
 
@@ -2418,12 +2339,12 @@ export class JuliaTranspiler extends BaseTranspiler {
                     methodsCode += this.printMethodDeclaration(
                         member,
                         identation,
-                    ); // No class name needed for static methods, moved outside struct
+                    );
                 }
             }
         });
 
-        // getproperty
+        // Add getproperty function for inheritance
         if (isChildClass) {
             methodsCode += `\nfunction Base.getproperty(self::${className}, name::Symbol)\n`;
             methodsCode += `    if hasfield(${className}, name)\n`;
@@ -2439,8 +2360,65 @@ export class JuliaTranspiler extends BaseTranspiler {
             methodsCode += `end\n`;
         }
 
-        return result + methodsCode;
+        return nestedStructsCode + result + methodsCode;
     }
+
+    extractNestedStructs(node: ts.ClassDeclaration): string[] {
+        const nestedStructs: string[] = [];
+        const processedTypes = new Set<string>();
+
+        // Look for property declarations with complex types
+        node.members.forEach(member => {
+            if (ts.isPropertyDeclaration(member) && member.type) {
+                if (ts.isTypeLiteralNode(member.type)) {
+                    const structName = this.capitalizeFirstLetter(member.name.getText());
+                    if (!processedTypes.has(structName)) {
+                        processedTypes.add(structName);
+                        const structCode = this.printTypeLiteralAsStruct(structName, member.type);
+                        nestedStructs.push(structCode);
+                    }
+                }
+            }
+        });
+
+        return nestedStructs;
+    }
+
+    printTypeLiteralAsStruct(name: string, node: ts.TypeLiteralNode): string {
+        let result = `@kwdef struct ${name}\n`;
+
+        node.members.forEach(member => {
+            if (ts.isPropertySignature(member)) {
+                const propName = member.name.getText();
+                let juliaType = "Any";
+                let defaultValue = "";
+
+                // Handle reserved keywords in property names
+                let safePropName = propName;
+                if (propName in this.ReservedKeywordsReplacements) {
+                    safePropName = `${propName}_var`;
+                }
+
+                // Get type information
+                if (member.type) {
+                    juliaType = this.convertTypeNodeToJuliaType(member.type);
+                }
+
+                // Handle optional properties with ?
+                if (member.questionToken) {
+                    juliaType = `Union{${juliaType}, Nothing}`;
+                    defaultValue = " = nothing";
+                }
+
+                // Add the property definition
+                result += `    ${safePropName}::${juliaType}${defaultValue}\n`;
+            }
+        });
+
+        result += "end";
+        return result;
+    }
+
 
     printClassDefinition(node, identation) {
         const className = node.name.escapedText;
@@ -2508,23 +2486,67 @@ export class JuliaTranspiler extends BaseTranspiler {
         return result;
     }
 
-    tsToJuliaType(tsType: string): string {
+    tsToJuliaType(tsType: string | undefined): string {
+        if (!tsType) return "Any";
+
+        tsType = tsType.trim();
+
         switch (tsType) {
             case "string":
+            case "Str":
                 return "String";
             case "number":
+            case "Num":
                 return "Float64";
             case "boolean":
+            case "Bool":
                 return "Bool";
             case "any":
                 return "Any";
             case "null":
             case "undefined":
                 return "Nothing";
-            // ... (Keep all your original cases here) ...
-            default:
-                return "Any"; // Or throw an error, or return a specific "unknown" type
+            case "void":
+                return "Nothing";
         }
+
+        // Handle array types like string[] or Array<string>
+        if (tsType.endsWith("[]")) {
+            const elementType = this.tsToJuliaType(tsType.slice(0, -2));
+            return `Vector{${elementType}}`;
+        }
+
+        // Handle generic types like Array<string> or Dictionary<string>
+        const genericMatch = tsType.match(/(\w+)<(.+)>/);
+        if (genericMatch) {
+            const container = genericMatch[1];
+            const typeArgs = genericMatch[2].split(",").map(t => this.tsToJuliaType(t.trim()));
+
+            if (container === "Array") {
+                return `Vector{${typeArgs.join(", ")}}`;
+            } else if (container === "Dictionary" || container === "Record") {
+                if (typeArgs.length === 1) {
+                    return `Dict{String, ${typeArgs[0]}}`;
+                } else if (typeArgs.length === 2) {
+                    return `Dict{${typeArgs[0]}, ${typeArgs[1]}}`;
+                }
+            }
+        }
+
+        // Handle intersection and union types
+        if (tsType.includes("&")) {
+            // For intersection types, use the first type as a simplification
+            return this.tsToJuliaType(tsType.split("&")[0].trim());
+        }
+
+        if (tsType.includes("|")) {
+            // For union types, build a Union type
+            const types = tsType.split("|").map(t => this.tsToJuliaType(t.trim()));
+            return `Union{${types.join(", ")}}`;
+        }
+
+        // Default fallback
+        return "Any";
     }
 
     printThrowStatement(node, identation) {
@@ -3692,4 +3714,200 @@ export class JuliaTranspiler extends BaseTranspiler {
         // or null if no match (though with *, it should always match at least "")
         return match ? match[0] : "";
     }
+
+    convertTypeNodeToJuliaType(typeNode: ts.TypeNode): string {
+        if (ts.isTypeReferenceNode(typeNode)) {
+            const typeName = typeNode.typeName.getText();
+            // Handle array types
+            if (typeName === "Str" || typeName === "string") {
+                return "String";
+            } else if (typeName === "Num" || typeName === "number") {
+                return "Float64";
+            } else if (typeName === "Bool" || typeName === "boolean") {
+                return "Bool";
+            } else if (typeName === "Dictionary") {
+                if (typeNode.typeArguments && typeNode.typeArguments.length > 0) {
+                    const valueType = this.convertTypeNodeToJuliaType(typeNode.typeArguments[0]);
+                    return `Dict{String, ${valueType}}`;
+                }
+                return "Dict{String, Any}";
+            } else if (typeName.endsWith("[]")) {
+                const baseType = typeName.slice(0, -2);
+                return `Vector{${this.mapJsDocTypeToJulia(baseType)}}`;
+            } else if (typeNode.typeArguments) {
+                // Handle generic types
+                const typeArgs = typeNode.typeArguments.map(arg =>
+                    this.convertTypeNodeToJuliaType(arg)).join(", ");
+
+                if (typeName === "Array") {
+                    return `Vector{${typeArgs}}`;
+                }
+                return `${typeName}{${typeArgs}}`;
+            }
+
+            return typeName;
+        } else if (ts.isUnionTypeNode(typeNode)) {
+            const types = typeNode.types.map(t => this.convertTypeNodeToJuliaType(t));
+            return `Union{${types.join(", ")}}`;
+        } else if (ts.isLiteralTypeNode(typeNode)) {
+            if (ts.isStringLiteral(typeNode.literal)) {
+                return "String";
+            } else if (ts.isNumericLiteral(typeNode.literal)) {
+                return "Float64";
+            }
+            return "Any";
+        } else if (ts.isTypeLiteralNode(typeNode)) {
+            return "Dict{String, Any}";
+        } else if (ts.isArrayTypeNode(typeNode)) {
+            const elementType = this.convertTypeNodeToJuliaType(typeNode.elementType);
+            return `Vector{${elementType}}`;
+        } else if (ts.isFunctionTypeNode(typeNode)) {
+            return "Function";
+        }
+
+        // Default type
+        return "Any";
+    }
+
+    capitalizeFirstLetter(str: string): string {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    printClassBody(node: ts.ClassDeclaration, identation: number): string {
+        let propertiesString = "";
+        const heritageClauses = node.heritageClauses;
+
+        if (heritageClauses !== undefined) {
+            const classExtends =
+                heritageClauses[0].types[0].expression.getText();
+            propertiesString += `${this.getIden(identation + 1)}parent::${classExtends}\n`;
+        }
+
+        // Create a map of property to complex type for use in the property definitions
+        const propertyTypeMap = new Map<string, string>();
+
+        node.members.forEach((member) => {
+            if (ts.isPropertyDeclaration(member) && member.type && ts.isTypeLiteralNode(member.type)) {
+                const propName = member.name.getText();
+                const typeName = this.capitalizeFirstLetter(propName);
+                propertyTypeMap.set(propName, typeName);
+            }
+        });
+
+        node.members.forEach((member) => {
+            // Process *all* PropertyDeclarations for fields
+            if (ts.isPropertyDeclaration(member)) {
+                // Removed isStaticMember check
+                if (ts.isIdentifier(member.name)) {
+                    const propertyName = member.name.text;
+                    let type = "";
+                    let defaultValue = ""; // Use this for @kwdef
+
+                    // Check if this property has a complex type that's been extracted to a struct
+                    if (propertyTypeMap.has(propertyName)) {
+                        type = `::${propertyTypeMap.get(propertyName)}`;
+                        defaultValue = ` = ${propertyTypeMap.get(propertyName)}()`;
+                    } else if (member.type) {
+                        // Handle explicit type annotations
+                        if (ts.isArrayTypeNode(member.type)) {
+                            // Handle array type node directly
+                            const elementTypeNode = member.type.elementType;
+                            let elementType = "Any";
+                            if (ts.isTypeReferenceNode(elementTypeNode)) {
+                                elementType = this.tsToJuliaType(elementTypeNode.typeName.getText());
+                            } else {
+                                elementType = this.tsToJuliaType(elementTypeNode.getText());
+                            }
+                            type = `::Vector{${elementType}}`;
+                        } else if (ts.isTypeReferenceNode(member.type)) {
+                            const typeName = member.type.typeName.getText();
+
+                            if (typeName === 'string' || typeName === 'Str') {
+                                type = '::String';
+                            } else if (typeName === 'number' || typeName === 'Num') {
+                                type = '::Float64';
+                            } else if (typeName === 'boolean' || typeName === 'Bool') {
+                                type = '::Bool';
+                            } else if (typeName.endsWith('[]')) {
+                                // Handle type annotations like string[]
+                                const baseType = typeName.slice(0, -2);
+                                const juliaType = this.tsToJuliaType(baseType);
+                                type = `::Vector{${juliaType}}`;
+                            } else {
+                                type = `::${this.tsToJuliaType(typeName)}`;
+                            }
+                        } else {
+                            // Handle other type references
+                            const typeText = member.type.getText();
+                            type = `::${this.tsToJuliaType(typeText)}`;
+                        }
+                    } else {
+                        type = "::Any"; // Default if no type is specified
+                    }
+
+                    // Get default value from initializer for @kwdef
+                    if (member.initializer) {
+                        defaultValue = ` = ${this.printNode(member.initializer, 0)}`;
+                    }
+
+                    // Handle special case for reserved keywords
+                    let safePropName = propertyName;
+                    if (propertyName in this.ReservedKeywordsReplacements) {
+                        safePropName = `${propertyName}_var`;
+                    }
+
+                    propertiesString += `${this.getIden(identation + 1)}${safePropName}${type}${defaultValue}\n`;
+                }
+            } else if (
+                ts.isMethodDeclaration(member) &&
+                !ts.isConstructorDeclaration(member) &&
+                !this.isStaticMember(member)
+            ) {
+                // Only add method signatures if they are instance methods
+                if (ts.isIdentifier(member.name)) {
+                    const methodName = member.name.text;
+                    // Add method as a Function field with a default value pointing to the function itself
+                    propertiesString += `${this.getIden(identation + 1)}${methodName}::Function = ${methodName}\n`;
+                }
+            }
+        });
+
+        let hasOnlyConstructor = false;
+        let constructorExists = false;
+        let propertyOrMethodExists = false; // Check for any property or instance method
+        let constructorNode: ts.ConstructorDeclaration | undefined = undefined;
+
+        node.members.forEach((member) => {
+            if (ts.isConstructorDeclaration(member)) {
+                constructorExists = true;
+                constructorNode = member;
+            }
+            // Check if there are any properties or instance methods defined
+            if (
+                ts.isPropertyDeclaration(member) ||
+                (ts.isMethodDeclaration(member) &&
+                    !this.isStaticMember(member) &&
+                    !ts.isConstructorDeclaration(member))
+            ) {
+                propertyOrMethodExists = true;
+            }
+        });
+
+        // Only consider it "has only constructor" if constructor exists AND no properties/methods exist
+        if (constructorExists && !propertyOrMethodExists) {
+            hasOnlyConstructor = true;
+        }
+
+        if (hasOnlyConstructor) {
+            propertiesString += `${this.getIden(identation + 1)}attrs::Dict{Symbol, Any}\n`;
+        }
+
+        if (propertiesString.trim() !== "") {
+            // only add propertiesString if not empty
+            return propertiesString;
+        }
+        return ""; // return empty string if no properties to avoid extra new line
+    }
+
+
 }
