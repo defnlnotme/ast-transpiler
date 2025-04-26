@@ -242,7 +242,7 @@ end;
     test('class declaration', () => {
         const ts = "class MyClass { constructor(a, b: number) { this.a = a; this.b = b; } }";
         const julia =
-            `struct MyClass
+            `mutable struct MyClass
     attrs::Dict{Symbol, Any}
     function MyClass(args...; a::Any, b::Float64, kwargs...)
         v = new(Dict{Symbol, Any}())
@@ -273,7 +273,7 @@ end
     }
 }`;
         const julia =
-            `@kwdef struct MyClass
+            `@kwdef mutable struct MyClass
     x::Float64 = 10
     y::String = raw"test"
     a1::Vector{String} = [raw"a", raw"b"]
@@ -309,7 +309,7 @@ end\n`;
     }
 }`;
         const julia =
-            `@kwdef struct teste
+            `@kwdef mutable struct teste
     parent::extended
     a1::Vector{String} = [raw"a", raw"b"]
     method::Function = method
@@ -343,7 +343,7 @@ end
     }
 }`;
         const julia =
-            `struct teste
+            `mutable struct teste
     parent::extended
     attrs::Dict{Symbol, Any}
     function teste(args...; x::Any, kwargs...)
@@ -964,7 +964,7 @@ no = !yes;
     }
 }`;
         const julia =
-            `@kwdef struct ClassWithOnlyMethod
+            `@kwdef mutable struct ClassWithOnlyMethod
     myMethod::Function = myMethod
 end
 function myMethod(self::ClassWithOnlyMethod, arg)
@@ -986,7 +986,7 @@ end
     }
 }`;
         const julia =
-`@kwdef struct Second
+`@kwdef mutable struct Second
     myClassProperty::String = raw"classProp"
     myBoolProp::Bool = false
     stringifyNumber::Function = stringifyNumber
@@ -1056,7 +1056,7 @@ export default class binance extends binanceRest {
         // - Handles default parameters (undefined -> nothing, {} -> Dict())
         // - Maps Promise<Type[]> return hint in JSDoc to Vector{Type}
         // - Keeps array literal `[ symbol ]`
-        const julia = `@kwdef struct binance
+        const julia = `@kwdef mutable struct binance
     parent::binanceRest
     describe::Function = describe
     watchLiquidations::Function = watchLiquidations
@@ -1189,4 +1189,149 @@ end\n`
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
+    test('class with attributes', () => {
+       const ts =
+`export default class Exchange {
+    options: {
+        [key: string]: any;
+    }
+    countries: Str[] = undefined;
+    userAgent: { 'User-Agent': string } | false = undefined;
+    userAgents: any = {
+        'chrome': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36',
+    }
+    MAX_VALUE: Num = Number.MAX_VALUE;
+    number: (numberString: string) => number = Number // or String (a pointer to a function)
+    liquidations: Dictionary<Liquidation> = {}
+    urls: {
+        logo?: string;
+        api?: string | Dictionary<string>;
+        test?: string | Dictionary<string>;
+        www?: string;
+        doc?: string[];
+        api_management?: string;
+        fees?: string;
+        referral?: string;
+    };
+    precision: {
+        amount: Num,
+        price: Num,
+        cost?: Num,
+        base?: Num,
+        quote?: Num,
+    } = undefined
+    has: Dictionary<boolean | 'emulated'>;
+    status: {
+        status: Str,
+        updated: Num,
+        eta: Num,
+        url: Str,
+        info: any,
+    } = undefined;
+    requiredCredentials: {
+        apiKey: Bool,
+        secret: Bool,
+        uid: Bool,
+        login: Bool,
+        password: Bool,
+        twofa: Bool, // 2-factor authentication (one-time password key)
+        privateKey: Bool, // a "0x"-prefixed hexstring private key for a wallet
+        walletAddress: Bool, // the wallet address "0x"-prefixed hexstring
+        token: Bool, // reserved for HTTP auth in some cases
+    };
+    limits: {
+        amount?: MinMax,
+        cost?: MinMax,
+        leverage?: MinMax,
+        price?: MinMax,
+    } = undefined;
+    fees: {
+        trading: {
+            tierBased: Bool,
+            percentage: Bool,
+            taker: Num,
+            maker: Num,
+        },
+        funding: {
+            tierBased: Bool,
+            percentage: Bool,
+            withdraw: {},
+            deposit: {},
+        },
+    };
+`
+       const julia =
+`@kwdef mutable struct Urls
+        logo::Union{String, Nothing} = nothing
+        api::Union{Union{String, Dict{String, String}}, Nothing} = nothing
+        test::Union{Union{String, Dict{String, String}}, Nothing} = nothing
+        www::Union{String, Nothing} = nothing
+        doc::Union{Vector{String}, Nothing} = nothing
+        api_management::Union{String, Nothing} = nothing
+        fees::Union{String, Nothing} = nothing
+        referral::Union{String, Nothing} = nothing
+end
+
+@kwdef mutable struct Precision
+        amount::Float64 = Float64()
+        price::Float64 = Float64()
+        cost::Union{Float64, Nothing} = nothing
+        base::Union{Float64, Nothing} = nothing
+        quote_var::Union{Float64, Nothing} = nothing
+end
+
+@kwdef mutable struct Status
+        status::String = String()
+        updated::Float64 = Float64()
+        eta::Float64 = Float64()
+        url::String = String()
+        info::Any
+end
+
+@kwdef mutable struct RequiredCredentials
+        apiKey::Bool
+        secret::Bool
+        uid::Bool
+        login::Bool
+        password::Bool
+        twofa::Bool
+        privateKey::Bool
+        walletAddress::Bool
+        token::Bool
+end
+
+@kwdef mutable struct Limits
+        amount::Union{MinMax, Nothing} = nothing
+        cost::Union{MinMax, Nothing} = nothing
+        leverage::Union{MinMax, Nothing} = nothing
+        price::Union{MinMax, Nothing} = nothing
+end
+
+@kwdef mutable struct Fees
+        trading::Dict{String, Any} = Dict{String, Any}()
+        funding::Dict{String, Any} = Dict{String, Any}()
+end
+
+@kwdef mutable struct Exchange
+    options::Dict{String, Any} = Dict{String, Any}()
+    countries::Vector{String} = nothing
+    userAgent::Union{Dict{String, String}, Bool} = nothing
+    userAgents::Any = Dict(
+    Symbol("chrome") => raw"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36"
+)
+    MAX_VALUE::Float64 = typemax(Float64)
+    number::Function = s -> parse(Float64, s)
+    liquidations::Dict{String, Liquidation} = Dict{String, Liquidation}()
+    urls::Urls = Urls()
+    precision::Precision = nothing
+    has::Dict{String, Union{Bool, String}} = Dict{String, Union{Bool, String}}()
+    status::Status = nothing
+    requiredCredentials::RequiredCredentials = RequiredCredentials()
+    limits::Limits = nothing
+    fees::Fees = Fees()
+end
+`
+    const output = transpiler.transpileJulia(ts).content;
+    expect(output).toBe(julia);
+    })
 });
