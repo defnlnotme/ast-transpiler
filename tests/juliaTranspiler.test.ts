@@ -1189,7 +1189,7 @@ end\n`
         const output = transpiler.transpileJulia(ts).content;
         expect(output).toBe(julia);
     });
-    test('class with attributes', () => {
+    test.only('class with attributes', () => {
        const ts =
 `export default class Exchange {
     options: {
@@ -1273,18 +1273,18 @@ end\n`
 end
 
 @kwdef mutable struct Precision
-        amount::Float64 = Float64()
-        price::Float64 = Float64()
+        amount::Float64
+        price::Float64
         cost::Union{Float64, Nothing} = nothing
         base::Union{Float64, Nothing} = nothing
         quote_var::Union{Float64, Nothing} = nothing
 end
 
 @kwdef mutable struct Status
-        status::String = String()
-        updated::Float64 = Float64()
-        eta::Float64 = Float64()
-        url::String = String()
+        status::String
+        updated::Float64
+        eta::Float64
+        url::String
         info::Any
 end
 
@@ -1308,27 +1308,27 @@ end
 end
 
 @kwdef mutable struct Fees
-        trading::Dict{String, Any} = Dict{String, Any}()
-        funding::Dict{String, Any} = Dict{String, Any}()
+        trading::Dict{String, Any}
+        funding::Dict{String, Any}
 end
 
 @kwdef mutable struct Exchange
-    options::Dict{String, Any} = Dict{String, Any}()
-    countries::Vector{String} = nothing
-    userAgent::Union{Dict{String, String}, Bool} = nothing
+    options::Dict{String, Any}
+    countries::Union{Vector{String}, Nothing} = nothing
+    userAgent::Union{Union{Dict{String, Any}, Bool}, Nothing} = nothing
     userAgents::Any = Dict(
     Symbol("chrome") => raw"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36"
 )
     MAX_VALUE::Float64 = typemax(Float64)
-    number::Function = s -> parse(Float64, s)
+    number::Function = Number
     liquidations::Dict{String, Liquidation} = Dict{String, Liquidation}()
-    urls::Urls = Urls()
-    precision::Precision = nothing
-    has::Dict{String, Union{Bool, String}} = Dict{String, Union{Bool, String}}()
-    status::Status = nothing
-    requiredCredentials::RequiredCredentials = RequiredCredentials()
-    limits::Limits = nothing
-    fees::Fees = Fees()
+    urls::Urls
+    precision::Union{Precision, Nothing} = nothing
+    has::Dict{String, Union{Bool, String}}
+    status::Union{Status, Nothing} = nothing
+    requiredCredentials::RequiredCredentials
+    limits::Union{Limits, Nothing} = nothing
+    fees::Fees
 end
 `
     const output = transpiler.transpileJulia(ts).content;

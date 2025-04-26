@@ -7,7 +7,7 @@ import ts, {
 } from "typescript";
 import { TranspilationError } from "./types.js"; // Import TranspilationError
 import { red, reset } from "colorette";
-import { Sign } from "crypto";
+import { Hash, Sign } from "crypto";
 
 // --- Conditional Debug Logging ---
 // Helper function to log messages only if the JULIA_TRANSPILER_DEBUG environment variable is set.
@@ -2139,8 +2139,8 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         let type = "Any"; // Default type
         let defaultValueString = ""; // String for the '= value' part
-        let isOptional = node.questionToken !== undefined; // Check TS optional '?'
         let hasInitializer = node.initializer !== undefined; // Check TS initializer '= value'
+        let isOptional = node.questionToken !== undefined; // Check TS optional '?'
 
         // 1. Determine Base Julia Type (without optionality initially)
         let isStructType = false; // Flag to track if base type is likely a struct
@@ -2191,7 +2191,7 @@ export class JuliaTranspiler extends BaseTranspiler {
                      // If it's not Dict/known struct but empty {}, default to Dict{Symbol, Any}
                      printedInitializer = "Dict{Symbol, Any}()";
                  }
-            } else if (node.initializer.kind === ts.SyntaxKind.UndefinedKeyword) {
+            } else if (node.initializer.getText() === "undefined") {
                 printedInitializer = "nothing";
                 // If initializer is 'undefined', treat the property as optional for type adjustment later
                 isOptional = true;
@@ -2209,21 +2209,13 @@ export class JuliaTranspiler extends BaseTranspiler {
 
         // 3. Adjust Type for Optionality based on TS '? :' or '= undefined'
         if (isOptional) {
-            // *** MODIFIED LOGIC for Struct Types ***
-            if (isStructType) {
-                // If the base type is a struct AND it's optional (e.g., = undefined),
-                // the test expects the type to remain `StructName` and the default to be `= nothing`.
-                // Do NOT wrap in Union{StructName, Nothing}.
-                type = type; // Keep the original struct type name
-            } else {
-                // For non-struct types, wrap in Union{Type, Nothing} if not already wrapped
-                if (!type.startsWith("Union{") || !type.includes("Nothing}")) {
-                     if (type === "Any") {
-                         type = "Union{Any, Nothing}";
-                     } else {
-                         type = `Union{${type}, Nothing}`;
-                     }
-                }
+            // For non-struct types, wrap in Union{Type, Nothing} if not already wrapped
+            if (!type.startsWith("Union{") || !type.includes("Nothing}")) {
+                    if (type === "Any") {
+                        type = "Union{Any, Nothing}";
+                    } else {
+                        type = `Union{${type}, Nothing}`;
+                    }
             }
 
             // If optional AND has NO initializer (or initializer was explicitly undefined), set default to '= nothing'
